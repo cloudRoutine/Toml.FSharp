@@ -60,7 +60,7 @@ let int4 = "72345"
     int2
     int3
     int4    ]    
-|> List.iter (fun x -> run pint64_toml x |> printfn "%A" );;
+|> List.iter (fun x -> run pInt64_toml x |> printfn "%A" );;
 
 
 let flt0 = "9._224_617  .445_991_228_313"
@@ -81,7 +81,7 @@ let flt7 = "6.626e-34"
     flt5
     flt6
     flt7    ]
-|> List.iter (fun x -> run pfloat_toml x |> printfn "%A" );;
+|> List.iter (fun x -> run pFloat_toml x |> printfn "%A" );;
 
 run toml_inlineTable 
     "{ one = 1, two = 2, three = 3}";;
@@ -91,12 +91,39 @@ run pString_toml "\"hello\"";;
 run toml_array  "[ 22.04 , 234.00, 23_4.304]";;
 
 run toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]";;
+
 //
 //run parseArray 
 //    "[   \"hello\", \"watup\", \"yo\" ] ";;
 //
 //run parseArray """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""";;
 
+let table0 = """[owner]
+name = "Tom Preston-Werner"
+dob = 1979-05-27T07:32:00-08:00 # First class dates
+"""
+(* 
+
+server = "192.168.1.1"   
+
+
+*)
+
+let table1="""[database]
+connection_max = 5000
+ports = [ 8001, 8001, 8002 ]
+enabled = true
+"""
+
+
+let ptable' : Parser<_> =
+    (pTableKey .>> tskipRestOfLine) .>>.
+    manyTill (pKVP' .>> tskipRestOfLine) eof
+;;
+run pKeyArray "ports = [ 8001, 8001, 8002 ]";;
+
+run ptable' table0;;
+run ptable' table1;;
 
 let toml0 = """
 
@@ -213,3 +240,8 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
             ]
 
 """
+
+
+
+
+

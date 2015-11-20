@@ -6,10 +6,9 @@ open System.Collections.Generic
 type path = string
 type ('k,'v) table = ('k,'v) Dictionary
 
-type tomlseq = path * item seq
-and toml = path * (Key,Value) Dictionary 
+type tomlseq = path * (Key*Value) seq
 
-and item  = Key * Value
+and toml = path * (Key,Value) table
 
 and [<RequireQualifiedAccess>] 
     Key = 
@@ -28,6 +27,7 @@ and [<RequireQualifiedAccess>]
     | Bool         of bool
     | DateTime     of DateTime
     | InlineTable  of (Key,Value) table
+    | Table        of (Key,Value) table     // should this be a value?
     | Array        of Value list
     override value.ToString () =
         let inline seqstr xs =
@@ -42,6 +42,6 @@ and [<RequireQualifiedAccess>]
         | DateTime v     -> string v
         | InlineTable vs -> sprintf "{ %s }" (seqstr vs)
         | Array vs       -> sprintf "[ %s ]" (seqstr vs)
-
+        | Table vs       -> sprintf "{| %s |}" (seqstr vs)
 
 
