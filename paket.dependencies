@@ -1,0 +1,13 @@
+source https://nuget.org/api/v2
+
+nuget FParsec
+nuget FsCheck
+nuget FsCheck.XUnit
+nuget FSharp.Formatting
+nuget NUnit 
+nuget NUnit.Runners
+nuget FAKE
+nuget SourceLink.Fake
+nuget XUnit
+
+github fsharp/FAKE modules/Octokit/Octokit.fsx
