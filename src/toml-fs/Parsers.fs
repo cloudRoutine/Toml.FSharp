@@ -24,7 +24,7 @@ let skip_toml_spaces : Parser<_> = skipManySatisfy ((=)' '|?|(=)'\t')
 let tspcs = toml_spaces
 let skip_tspcs = skip_toml_spaces
 
-// Punctuation Parsers
+(*  Punctuation Parsers *)
 
 let ``.``: Parser<_>    = pchar '.'
 let ``,``: Parser<_>    = attempt (skip_tspcs >>. pchar ',' .>> skip_tspcs)  
@@ -36,11 +36,20 @@ let ``}``: Parser<_>    = skip_tspcs >>. pchar '}'    .>> skip_tspcs
 let ``[[``: Parser<_>   = skip_tspcs >>. pstring "[[" .>> skip_tspcs  
 let ``]]``: Parser<_>   = skip_tspcs >>. pstring "]]" .>> skip_tspcs  
 let ``"``: Parser<_>    = pchar '"'
+let ``'``: Parser<_>    = pchar '\''
 let ``"""``: Parser<_>  = pstring "\"\"\""
+let ``'''``: Parser<_>  = pstring "\'\'\'"
 let skipEqs : Parser<_> = skip_tspcs >>. skipChar '=' >>. skip_tspcs
+
+(*  Comment/LineEnd Parsers *)
+
 
 let pComment = ``#``.>>. restOfLine false
 let skipComment : Parser<_> = skipChar '#' >>. skipRestOfLine  true
+let tskipRestOfLine = skipComment <|>  skipRestOfLine  true
+
+
+(*  String Parsers  *)
 
 let psingle_string : Parser<_> = 
     between ``"`` ``"`` (manySatisfy ((<>)'"'))
@@ -48,11 +57,18 @@ let psingle_string : Parser<_> =
 let pmult_string : Parser<_> = 
     between ``"""`` ``"""`` (manyChars anyChar)
 
+let psingle_litstring : Parser<_> = 
+    between ``'`` ``'`` (manySatisfy ((<>)'\''))
+
+let pmult_litstring : Parser<_> = 
+    between ``'''`` ``'''`` (manyChars anyChar)
+
 let pString_toml : Parser<_> = psingle_string <|> pmult_string
 
-let pBool_toml : Parser<_> = 
-    (pstring "false" >>% false) <|> (pstring "true" >>% true)
 
+(*|-----------------|*)
+(*| Numeric Parsers |*)
+(*|-----------------|*)
 
 let pint64_toml : Parser<_> = 
     followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
@@ -81,20 +97,11 @@ let private toDateTime str =
 let pDateTime_toml : Parser<_> =
     manySatisfy (isDigit|?|isAnyOf['T';':';'.';'-';'Z']) |>> toDateTime
 
-let pBareKey : Parser<_> = 
-    many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
 
-let pQuoteKey : Parser<_> = 
-    between ``"`` ``"`` (many1Chars anyChar) 
+(*  Simple Value Parsers *)
 
-let toml_key : Parser<_> =
-    choice [pBareKey |>> Key.Bare; pQuoteKey |>> Key.Quoted]
-
-let pTableKey : Parser<_> = 
-    between ``[`` ``]`` (sepBy pBareKey ``.``)
-
-let pTableArrayKey : Parser<_> = 
-    between ``[[`` ``]]`` (sepBy pBareKey ``.``)
+let pBool_toml : Parser<_> = 
+    (pstring "false" >>% false) <|> (pstring "true" >>% true)
 
 let private toml_simval : Parser<_> =
     choice [
@@ -104,6 +111,32 @@ let private toml_simval : Parser<_> =
         pBool_toml           |>> Value.Bool
         pDateTime_toml       |>> Value.DateTime
     ]
+
+
+(*  Key Parsers *)
+
+let pBareKey : Parser<_> = 
+    many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
+
+
+let pQuoteKey : Parser<_> = 
+    between ``"`` ``"`` (many1Chars anyChar) 
+
+
+let toml_key : Parser<_> =
+    choice [pBareKey |>> Key.Bare; pQuoteKey |>> Key.Quoted]
+
+
+let pTableKey : Parser<_> = 
+    between ``[`` ``]`` (sepBy pBareKey ``.``)
+
+let pTableArrayKey : Parser<_> = 
+    between ``[[`` ``]]`` (sepBy pBareKey ``.``)
+
+
+
+(*  Collection Parsers *)
+
 
 // Forward declaration to allow mutually recursive 
 // parsers between arrays and inline tables
@@ -131,14 +164,22 @@ let toml_inlineTable : Parser<_> =
     pITbl
 
 
+(*  Toplevel Parsers  *)
+
+
 let toml_value : Parser<_> = 
     choice [toml_simval; toml_array; toml_inlineTable]
+
+
+let toml_item : Parser<item> =
+    toml_key .>>. (skipEqs >>. toml_value)
 
 
 
 
 (*
-    How to build low level choice parser for TOML
+    TODO - build low level choice parser for TOML?
+
     Top Level
     ---------
         - Table Array   : starts with `[[`
@@ -159,6 +200,29 @@ let toml_value : Parser<_> =
 
 
         Could do if digit then (float <|> int <|> datetime)
+
+    Example of Low Level Parser
+    ---------------------------
+
+    If you look at the definitions for the argument parsers, you’ll see that in almost all cases one can
+    decide which parser should handle the input just based on the next char in the input. Hence, we could 
+    replace the choice‐based parser with the following low‐level implementation:
+
+    let error = expected "JSON value"
+    fun (stream: CharStream<_>) ->
+        match stream.Peek() with
+        | '{' -> jobject stream
+        | '[' -> jlist stream
+        | '"' -> jstring stream
+        | 't' when stream.Skip("true")  -> Reply(JBool true)
+        | 'f' when stream.Skip("false") -> Reply(JBool false)
+        | 'n' when stream.Skip("null")  -> Reply(JNull)
+        | _ ->
+            let stateTag = stream.StateTag
+            let mutable reply = jnumber stream
+            if reply.Status = Error && stateTag = stream.StateTag then
+               reply.Error <- error
+            reply
         
 *)
 
