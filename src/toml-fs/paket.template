@@ -1,0 +1,23 @@
+type project
+owners
+    Jared Hester
+authors 
+    Jared Hester
+projectUrl
+    http://github.com/cloudRoutine/toml-fs
+iconUrl
+    https://raw.githubusercontent.com/cloudRoutine/toml-fs/master/docs/files/img/logo.png
+licenseUrl
+    http://github.com/cloudRoutine/toml-fs/blob/master/LICENSE.txt
+requireLicenseAcceptance
+    false
+copyright
+    Copyright 2015
+tags
+    F# TOML parser FParsec FSharp config markup
+summary
+    FParsec TOML Parser for F#
+description
+    FParsec TOML Parser for F#
+
+
