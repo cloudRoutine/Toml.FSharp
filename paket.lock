@@ -147,7 +147,7 @@ NUGET
     xunit (2.1.0)
       xunit.assert (2.1.0)
       xunit.core (2.1.0)
-    xunit.abstractions (2.0.0) - framework: dnxcore50
+    xunit.abstractions (2.0.0)
     xunit.assert (2.1.0)
       System.Collections (>= 4.0.0) - framework: dnxcore50
       System.Diagnostics.Debug (>= 4.0.0) - framework: dnxcore50

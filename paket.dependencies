@@ -9,5 +9,6 @@ nuget NUnit.Runners
 nuget FAKE
 nuget SourceLink.Fake
 nuget XUnit
+nuget xunit.abstractions
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx

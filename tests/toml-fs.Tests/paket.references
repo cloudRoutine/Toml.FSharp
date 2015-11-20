@@ -3,3 +3,4 @@ NUnit.Runners
 FsCheck
 FsCheck.XUnit
 XUnit
+xunit.abstractions
