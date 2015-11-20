@@ -15,9 +15,9 @@ and [<RequireQualifiedAccess>]
     Key = 
     | Bare      of string
     | Quoted    of String
-    override key.ToString() =
+    override key.ToString () =
         match key with
-        | Bare k -> k
+        | Bare k   -> k
         | Quoted k -> k 
 
 and [<RequireQualifiedAccess>] 
@@ -29,19 +29,19 @@ and [<RequireQualifiedAccess>]
     | DateTime     of DateTime
     | InlineTable  of (Key,Value) table
     | Array        of Value list
-    override value.ToString() =
+    override value.ToString () =
         let inline seqstr xs =
             let sb = System.Text.StringBuilder()
             xs |> Seq.iter (fun x -> sb.Append(string x).Append(", ")|>ignore)
             string sb            
         match value with
-        | String v -> v
-        | Int v -> string v
-        | Float v -> string v
-        | Bool v -> string v
-        | DateTime v -> string v
+        | String v       -> v
+        | Int v          -> string v
+        | Float v        -> string v
+        | Bool v         -> string v
+        | DateTime v     -> string v
         | InlineTable vs -> sprintf "{ %s }" (seqstr vs)
-        | Array vs -> sprintf "[ %s ]" (seqstr vs)
+        | Array vs       -> sprintf "[ %s ]" (seqstr vs)
 
 
 

@@ -26,49 +26,36 @@ let skip_tspcs = skip_toml_spaces
 
 (*  Punctuation Parsers *)
 
-let ``.``: Parser<_>    = pchar '.'
-let ``,``: Parser<_>    = attempt (skip_tspcs >>. pchar ',' .>> skip_tspcs)  
-let ``#``: Parser<_>    = pchar '#'
-let ``[``: Parser<_>    = skip_tspcs >>. pchar '['    .>> skip_tspcs           
-let ``]``: Parser<_>    = skip_tspcs >>. pchar ']'    .>> skip_tspcs
-let ``{``: Parser<_>    = skip_tspcs >>. pchar '{'    .>> skip_tspcs
-let ``}``: Parser<_>    = skip_tspcs >>. pchar '}'    .>> skip_tspcs 
-let ``[[``: Parser<_>   = skip_tspcs >>. pstring "[[" .>> skip_tspcs  
-let ``]]``: Parser<_>   = skip_tspcs >>. pstring "]]" .>> skip_tspcs  
-let ``"``: Parser<_>    = pchar '"'
-let ``'``: Parser<_>    = pchar '\''
-let ``"""``: Parser<_>  = pstring "\"\"\""
-let ``'''``: Parser<_>  = pstring "\'\'\'"
+let ``.``   : Parser<_> = pchar '.'
+let ``,``   : Parser<_> = attempt (skip_tspcs >>. pchar ',' .>> skip_tspcs)  
+let ``#``   : Parser<_> = pchar '#'
+let ``[``   : Parser<_> = skip_tspcs >>. pchar '['    .>> skip_tspcs           
+let ``]``   : Parser<_> = skip_tspcs >>. pchar ']'    .>> skip_tspcs
+let ``{``   : Parser<_> = skip_tspcs >>. pchar '{'    .>> skip_tspcs
+let ``}``   : Parser<_> = skip_tspcs >>. pchar '}'    .>> skip_tspcs 
+let ``[[``  : Parser<_> = skip_tspcs >>. pstring "[[" .>> skip_tspcs  
+let ``]]``  : Parser<_> = skip_tspcs >>. pstring "]]" .>> skip_tspcs  
+let ``"``   : Parser<_> = pchar '"'
+let ``'``   : Parser<_> = pchar '\''
+let ``"""`` : Parser<_> = pstring "\"\"\""
+let ``'''`` : Parser<_> = pstring "\'\'\'"
 let skipEqs : Parser<_> = skip_tspcs >>. skipChar '=' >>. skip_tspcs
 
 (*  Comment/LineEnd Parsers *)
 
-
-let pComment = ``#``.>>. restOfLine false
-let skipComment : Parser<_> = skipChar '#' >>. skipRestOfLine  true
-let tskipRestOfLine = skipComment <|>  skipRestOfLine  true
-
+let pComment        : Parser<_> = ``#``.>>. restOfLine false
+let skipComment     : Parser<_> = skipChar '#' >>. skipRestOfLine  true
+let tskipRestOfLine : Parser<_> = skipComment <|>  skipRestOfLine  true
 
 (*  String Parsers  *)
 
-let psingle_string : Parser<_> = 
-    between ``"`` ``"`` (manySatisfy ((<>)'"'))
+let psingle_string    : Parser<_> = between ``"`` ``"`` (manySatisfy ((<>)'"'))
+let pmult_string      : Parser<_> = between ``"""`` ``"""`` (manyChars anyChar)
+let psingle_litstring : Parser<_> = between ``'`` ``'`` (manySatisfy ((<>)'\''))
+let pmult_litstring   : Parser<_> = between ``'''`` ``'''`` (manyChars anyChar)
+let pString_toml      : Parser<_> = psingle_string <|> pmult_string
 
-let pmult_string : Parser<_> = 
-    between ``"""`` ``"""`` (manyChars anyChar)
-
-let psingle_litstring : Parser<_> = 
-    between ``'`` ``'`` (manySatisfy ((<>)'\''))
-
-let pmult_litstring : Parser<_> = 
-    between ``'''`` ``'''`` (manyChars anyChar)
-
-let pString_toml : Parser<_> = psingle_string <|> pmult_string
-
-
-(*|-----------------|*)
 (*| Numeric Parsers |*)
-(*|-----------------|*)
 
 let pint64_toml : Parser<_> = 
     followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
@@ -76,16 +63,13 @@ let pint64_toml : Parser<_> =
     .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
     |>> int64
 
-
 // TODO - Proper checks for `_` rules and `.` count
 //[<MethodImpl (MethodImplOptions.AggressiveInlining)>]
-
 let pfloat_toml : Parser<_> = 
     let floatChar = satisfy (isDigit|?|isAnyOf['e';'E';'+';'-';'.'])
     followedByL (satisfy ((<>)'0')) "TOML floats cannot begin with leading 0s"  
     >>. many1Chars (skipChar '_' >>. floatChar <|> floatChar)
     |>> float
-
 
 let private toDateTime str =
     let mutable dt = Unchecked.defaultof<DateTime>
@@ -93,15 +77,11 @@ let private toDateTime str =
     | false -> failwithf "failed paring into DateTime - %s" str
     | true  -> dt
 
-
-let pDateTime_toml : Parser<_> =
-    manySatisfy (isDigit|?|isAnyOf['T';':';'.';'-';'Z']) |>> toDateTime
-
+let pDateTime_toml : Parser<_> = manySatisfy (isDigit|?|isAnyOf['T';':';'.';'-';'Z']) |>> toDateTime
 
 (*  Simple Value Parsers *)
 
-let pBool_toml : Parser<_> = 
-    (pstring "false" >>% false) <|> (pstring "true" >>% true)
+let pBool_toml : Parser<_> = (pstring "false" >>% false) <|> (pstring "true" >>% true)
 
 let private toml_simval : Parser<_> =
     choice [
@@ -112,31 +92,15 @@ let private toml_simval : Parser<_> =
         pDateTime_toml       |>> Value.DateTime
     ]
 
-
 (*  Key Parsers *)
 
-let pBareKey : Parser<_> = 
-    many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
-
-
-let pQuoteKey : Parser<_> = 
-    between ``"`` ``"`` (many1Chars anyChar) 
-
-
-let toml_key : Parser<_> =
-    choice [pBareKey |>> Key.Bare; pQuoteKey |>> Key.Quoted]
-
-
-let pTableKey : Parser<_> = 
-    between ``[`` ``]`` (sepBy pBareKey ``.``)
-
-let pTableArrayKey : Parser<_> = 
-    between ``[[`` ``]]`` (sepBy pBareKey ``.``)
-
-
+let pBareKey       : Parser<_> = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
+let pQuoteKey      : Parser<_> = between ``"`` ``"`` (many1Chars anyChar) 
+let toml_key       : Parser<_> = choice [pBareKey |>> Key.Bare; pQuoteKey |>> Key.Quoted]
+let pTableKey      : Parser<_> = between ``[`` ``]`` (sepBy pBareKey ``.``)
+let pTableArrayKey : Parser<_> = between ``[[`` ``]]`` (sepBy pBareKey ``.``)
 
 (*  Collection Parsers *)
-
 
 // Forward declaration to allow mutually recursive 
 // parsers between arrays and inline tables
@@ -144,10 +108,8 @@ let private pArr,  private pArrImpl  = createParserForwardedToRef ()
 let private pITbl, private pITblImpl = createParserForwardedToRef ()
 
 let toml_array : Parser<_> =
-    pArrImpl := 
-        between  ``[`` ``]``
-            (sepBy (pArr <|> pITbl <|> toml_simval) ``,``)
-        |>> Value.Array
+    pArrImpl := between  ``[`` ``]`` (sepBy(pArr<|>pITbl<|>toml_simval) ``,``)
+                |>> Value.Array
     pArr 
 
 
@@ -155,30 +117,24 @@ let toml_inlineTable : Parser<_> =
     let pitem = toml_key .>>. (skipEqs >>. toml_simval)
     let pArr  = toml_key .>>. (skipEqs >>. toml_array)
     pITblImpl :=
-        between ``{`` ``}``
-            (sepBy (tspcs >>. (pitem <|> pArr)) ``,``)
+        between ``{`` ``}`` (sepBy (tspcs >>. (pitem <|> pArr)) ``,``)
         |>> fun items ->
             let tbl:(_,_) table = table<_,_> ()
             List.iter tbl.Add items
             Value.InlineTable tbl
     pITbl
 
-
 (*  Toplevel Parsers  *)
 
+let toml_value   : Parser<_>    = choice [toml_simval; toml_array; toml_inlineTable]
+let toml_item    : Parser<item> = toml_key .>>. (skipEqs >>. toml_value)
 
-let toml_value : Parser<_> = 
-    choice [toml_simval; toml_array; toml_inlineTable]
-
-
-let toml_item : Parser<item> =
-    toml_key .>>. (skipEqs >>. toml_value)
-
-
+let arrayOfTable : Parser<_>    = 
+    manyTill toml_item ``[[``
 
 
 (*
-    TODO - build low level choice parser for TOML?
+    TODO - build low level choice parser for TOML toplevel?
 
     Top Level
     ---------
