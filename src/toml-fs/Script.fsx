@@ -79,6 +79,7 @@ hosts = [
   "omega"
 ]
 
+
 """
 
 let toml1 = """
@@ -98,6 +99,7 @@ server = "192.168.1.1"
 ports = [ 8001, 8001, 8002 ]
 connection_max = 5000
 enabled = true
+
 
 """
 
@@ -202,7 +204,7 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
     int2
     int3
     int4    ]    
-|> List.iter (fun x -> run pInt64_toml x |> printfn "%A" );;
+|> List.iter (fun x -> run pInt64_toml x |> printfn "%A");;
 
 [   flt0
     flt1
@@ -212,7 +214,7 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
     flt5
     flt6
     flt7    ]
-|> List.iter (fun x -> run pFloat_toml x |> printfn "%A" );;
+|> List.iter (fun x -> run pFloat_toml x |> printfn "%A");;
 
 [
     date1
@@ -221,16 +223,16 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
     date4
     date5
     date6   ] 
-|> List.iter (fun x -> run pDateTime_toml x  |> printfn "%A");;
+|> List.iter (fun x -> run pDateTime_toml x |> printfn "%A");;
 
-run toml_inlineTable  "{ one = 1, two = 2, three = 3}";;
-run pString_toml "\"hello\"";;
-run toml_array  "[   \"hello\", \"watup\", \"yo\" ] ";;
-run toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""";;
-run toml_array  "[ 22.04 , 234.00, 23_4.304]";;
-run toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]";;
-run pTable table0;;
-run pTable table1;;
+run toml_inlineTable  "{ one = 1, two = 2, three = 3}" ;;
+run toml_string "\"hello\"" ;;
+run toml_array  "[   \"hello\", \"watup\", \"yo\" ] " ;;
+run toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""" ;;
+run toml_array  "[ 22.04 , 234.00, 23_4.304]" ;;
+run toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]" ;;
+run pTable table0 ;;
+run pTable table1 ;;
 
 
 printfn "toml 0"

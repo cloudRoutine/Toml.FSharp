@@ -13,6 +13,7 @@ let inline (|&|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x && pred2 x
 
 /// Compose predicates with `||`
 let inline (|?|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x || pred2 x
+
 [<RequireQualifiedAccess>]
 module  List =
     let inline last ls =
@@ -38,6 +39,7 @@ let skip_tspcs = skip_toml_spaces
 
 
 (*| Comment/LineEnd Parsers |*)
+
 let skipComment     : Parser<_> = skipChar '#' >>. skipRestOfLine  true
 let tskipRestOfLine : Parser<_> = skipComment <|>  skipRestOfLine  true
 let tskipper = skipMany (choice [skip_tspcs; tskipRestOfLine])
@@ -45,6 +47,7 @@ let tskipper = skipMany (choice [skip_tspcs; tskipRestOfLine])
 let spcblock: Parser<_> = 
     skipMany(choice [   skip_tspcs .>> skipUnicodeNewline 
                         skip_tspcs .>> tskipRestOfLine      ])
+
 
 (*| Punctuation Parsers |*)
 
@@ -64,15 +67,12 @@ let ``'''`` : Parser<_> = pstring "\'\'\'"
 let skipEqs : Parser<_> = skip_tspcs >>. skipChar '=' >>. skip_tspcs
 
 
-
-
 (*| String Parsers |*)
 
 let psingle_string    : Parser<_> = between ``"`` ``"`` (manySatisfy ((<>)'"'))
 let pmult_string      : Parser<_> = between ``"""`` ``"""`` (manyChars anyChar)
 let psingle_litstring : Parser<_> = between ``'`` ``'`` (manySatisfy ((<>)'\''))
 let pmult_litstring   : Parser<_> = between ``'''`` ``'''`` (manyChars anyChar)
-let pString_toml      : Parser<_> = psingle_string <|> pmult_string
 
 let toml_string : Parser<_> =
     choice [ psingle_string; pmult_string; psingle_litstring; pmult_litstring ]
@@ -136,9 +136,17 @@ let toml_inlineTable, private pITblImpl   = createParserForwardedToRef ()
 
 let pKVP : Parser<_>  =  
     tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
- 
 
-pArrayImpl := between  ``[`` ``]`` (sepBy toml_value ``,``) |>> Value.Array
+let parr : Parser<_> = 
+    let ``[``:Parser<_> = (attempt (``[`` .>> unicodeNewline .>> skip_tspcs)) <|> ``[`` 
+    let ``]``:Parser<_> = (attempt (skip_tspcs .>> unicodeNewline .>> skip_tspcs >>. ``]``)) <|> ``]`` 
+    let ``,``:Parser<_> = (attempt (``,`` .>> unicodeNewline .>> skip_tspcs)) <|> ``,`` 
+    between  
+        ``[`` ``]`` (sepBy toml_value ``,``) |>> Value.Array
+
+pArrayImpl := parr
+    
+    
 
 pITblImpl :=
     between ``{`` ``}`` (sepBy pKVP ``,``)
@@ -177,47 +185,47 @@ pValueImpl := value_parser
 
 let toml_item : Parser<_> = toml_key .>>. (skipEqs >>. toml_value)
 
-let toml_toplevel, private pToplevelImpl      = createParserForwardedToRef ()
-//let pTableArray_toml,private pTableArrayImpl = createParserForwardedToRef ()
+let toml_toplevel, private pToplevelImpl = createParserForwardedToRef ()
 
 let pTable : Parser<_> =
-    //manyTill (toml_item .>> tskipRestOfLine) eof
-    (((pTableKey |>> fun ks -> List.last ks).>> tskipRestOfLine) 
-    .>>. 
-     (many1 (toml_toplevel .>> tskipRestOfLine))
-    |>> fun (tk,items) -> 
+    (pTableKey .>> tskipRestOfLine) .>>. many toml_toplevel
+    |>> fun (ks,items) -> 
+        let tk = List.last ks
         let tbl:(_,_) table = table<_,_> ()
         List.iter tbl.Add items
-        tk,tbl )
+        tk,tbl 
 //        Value.Table tbl )
 
 
 let pTableArray : Parser<_> =
-    ((pTableArrayKey .>> tskipRestOfLine) 
-        |>> fun ks -> List.last ks
-    //manyTill (toml_item .>> tskipRestOfLine) eof
-        .>>. 
-     (many1 (toml_toplevel .>> tskipRestOfLine))
-    |>> fun (ak,items) -> 
+    (pTableArrayKey .>> tskipRestOfLine) .>>. many toml_toplevel
+    |>> fun (ks,items) -> 
+        let ak = List.last ks
         let tbl:(_,_) table = table<_,_> ()
         List.iter tbl.Add items
-        ak,Value.Array ([Value.InlineTable tbl])
-    )
+        ak, Value.Array ([Value.InlineTable tbl])
+    
 
 
 let private toplevel_parser (stream: CharStream<_>) =
-    match stream.Peek() with
-    | '{' -> pTableArray   stream
-    | '[' -> (pTable |>> fun (k,tbl) -> k,Value.Table(tbl))       stream
+    match stream.Peek () with
+    | '#'  -> (skipComment >>. toml_toplevel) stream
+    | ' '
+    | '\t' -> (skip_tspcs >>. toml_toplevel) stream
+    | '\n' -> (skipUnicodeNewline >>. toml_toplevel) stream
+    | '['  -> 
+        if stream.Peek2() = TwoChars('[','[') then pTableArray stream else
+        (pTable |>> fun (k,tbl) -> k,Value.Table tbl) stream
     | c when (isDigit|?|isLetter|?|isAnyOf['"';'\'']) c ->
         toml_item stream
-    | _ -> Reply (Error, expected "A TOML table, array of tables, or a key value pair")
+    | _    -> 
+        Reply (Error, expected "A TOML table, array of tables, or a key value pair")
 
 pToplevelImpl := toplevel_parser
 
+
 let parse_toml : Parser<_> = 
-    //(skip_tspcs >>. many1 (toml_toplevel .>> tskipRestOfLine ))
-    spcblock >>. (many1 (toml_toplevel .>> (many1 tskipRestOfLine )))
+    (many1 toml_toplevel) 
     |>> fun items -> 
         let tbl:(_,_) table = table<_,_> ()
         List.iter tbl.Add items
