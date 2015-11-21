@@ -120,7 +120,7 @@ let pBareKey       : Parser<_> = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';
 let pQuoteKey      : Parser<_> = between ``"`` ``"`` (many1Chars anyChar) 
 
 // key in a collection
-let toml_key       : Parser<_> = choice [pBareKey |>> Key.Bare; pQuoteKey |>> Key.Quoted]
+let toml_key       : Parser<_> = choice [pBareKey; pQuoteKey ]
 
 // toplevel keys
 let pTableKey      : Parser<_> = between ``[`` ``]`` (sepBy toml_key ``.``)
@@ -134,7 +134,9 @@ let toml_value,       private pValueImpl  = createParserForwardedToRef ()
 let toml_array,       private pArrayImpl  = createParserForwardedToRef ()
 let toml_inlineTable, private pITblImpl   = createParserForwardedToRef ()
 
-let pKVP : Parser<_>  =  tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
+let pKVP : Parser<_>  =  
+    tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
+ 
 
 pArrayImpl := between  ``[`` ``]`` (sepBy toml_value ``,``) |>> Value.Array
 
@@ -142,7 +144,7 @@ pITblImpl :=
     between ``{`` ``}`` (sepBy pKVP ``,``)
     |>> fun items ->
         let tbl:(_,_) table = table<_,_> ()
-        List.iter (fun (k,v) -> tbl.Add(string k,v)   ) items
+        List.iter tbl.Add items
         Value.InlineTable tbl
 
 
@@ -173,7 +175,7 @@ pValueImpl := value_parser
         
 (*| Toplevel Parsers |*)
 
-let toml_item : Parser<Key*Value> = toml_key .>>. (skipEqs >>. toml_value)
+let toml_item : Parser<_> = toml_key .>>. (skipEqs >>. toml_value)
 
 let toml_toplevel, private pToplevelImpl      = createParserForwardedToRef ()
 //let pTableArray_toml,private pTableArrayImpl = createParserForwardedToRef ()
@@ -185,7 +187,7 @@ let pTable : Parser<_> =
      (many1 (toml_toplevel .>> tskipRestOfLine))
     |>> fun (tk,items) -> 
         let tbl:(_,_) table = table<_,_> ()
-        List.iter (fun (k,v) -> tbl.Add(string k,v)) items
+        List.iter tbl.Add items
         tk,tbl )
 //        Value.Table tbl )
 
@@ -198,7 +200,7 @@ let pTableArray : Parser<_> =
      (many1 (toml_toplevel .>> tskipRestOfLine))
     |>> fun (ak,items) -> 
         let tbl:(_,_) table = table<_,_> ()
-        List.iter (fun (k,v) -> tbl.Add(string k,v)) items
+        List.iter tbl.Add items
         ak,Value.Array ([Value.InlineTable tbl])
     )
 
@@ -218,7 +220,7 @@ let parse_toml : Parser<_> =
     spcblock >>. (many1 (toml_toplevel .>> (many1 tskipRestOfLine )))
     |>> fun items -> 
         let tbl:(_,_) table = table<_,_> ()
-        List.iter (fun (k,v) -> tbl.Add(string k,v)) items
+        List.iter tbl.Add items
         tbl
 (* 
     ---- NOTES ----

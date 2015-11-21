@@ -6,14 +6,14 @@ open System.Collections.Generic
 type path = string
 type ('k,'v) table = ('k,'v) Dictionary
 
-type tomlseq = path * (Key*Value) seq
+type tomlseq = path * (string*Value) seq
 
-and toml = path * (Key,Value) table
+and toml = path * (string,Value) table
 
 and [<RequireQualifiedAccess>] 
     Key = 
     | Bare      of string
-    | Quoted    of String
+    | Quoted    of string
     override key.ToString () =
         match key with
         | Bare k   -> k
@@ -26,8 +26,8 @@ and [<RequireQualifiedAccess>]
     | Float        of float
     | Bool         of bool
     | DateTime     of DateTime
-    | InlineTable  of (string,Value) table    // "unwrap" keys for table storage
-    | Table        of (string,Value) table     // should this be a value?
+    | InlineTable  of (string, Value) table    // "unwrap" keys for table storage
+    | Table        of (string, Value) table     // should this be a value?
     | Array        of Value list
     override value.ToString () =
         let inline seqstr xs =
