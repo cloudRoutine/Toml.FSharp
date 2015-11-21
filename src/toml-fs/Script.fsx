@@ -1,7 +1,9 @@
 ﻿#r @"../../packages/FParsec/lib/net40-client/FParsecCS.dll"
 #r @"../../packages/FParsec/lib/net40-client/FParsec.dll"
-#load   "AST.fs"
-        "Parsers.fs"
+#r @"bin/release/toml-fs.dll"
+//#load "AST.fs"
+//#load "Parsers.fs"
+
 open System 
 open FParsec
 open TomlFs.AST
@@ -29,7 +31,6 @@ let inline notChar (c1:char) (c2:char) = uint32 c1 <> uint32 c2
 //    let intMid: Parser<_>  =  
 
 
-let comment = ``#``.>>. restOfLine false
 
 let date1 = "1979-05-27T07:32:00Z"
 let date2 = "1979-05-27T00:32:00-07:00"
@@ -115,15 +116,8 @@ ports = [ 8001, 8001, 8002 ]
 enabled = true
 """
 
-
-let ptable' : Parser<_> =
-    (pTableKey .>> tskipRestOfLine) .>>.
-    manyTill (pKVP' .>> tskipRestOfLine) eof
-;;
-run pKeyArray "ports = [ 8001, 8001, 8002 ]";;
-
-run ptable' table0;;
-run ptable' table1;;
+run pTable table0;;
+run pTable table1;;
 
 let toml0 = """
 
@@ -181,6 +175,26 @@ ports = [ 8001, 8001, 8002 ]
 connection_max = 5000
 enabled = true
 
+"""
+
+let toml2 = """
+
+# This is a TOML document. Boom.
+
+title = "TOML Example"
+
+[owner]
+name = "Tom Preston-Werner"
+organization = "GitHub"
+bio = "GitHub Cofounder & CEO\nLikes tater tots and beer."
+dob = 1979-05-27T07:32:00Z # First class dates? Why not?
+
+[database]
+server = "192.168.1.1"
+ports = [ 8001, 8001, 8002 ]
+connection_max = 5000
+enabled = true
+
 [servers]
 
   # You can indent as you please. Tabs or spaces. TOML don't care.
@@ -215,7 +229,25 @@ hosts = [
 
 """
 
-let toml2 = """
+let toml3 = """
+
+# Test file for TOML
+# Only this one tries to emulate a TOML file written by a user of the kind of parser writers probably hate
+# This part you'll really hate
+
+[the]
+test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
+
+    [the.hard]
+    test_array = [ "] ", " # "]      # ] There you go, parse this!
+    test_array2 = [ "Test #11 ]proved that", "Experiment #9 was a success" ]
+    # You didn't think it'd as easy as chucking out the last #, did you?
+    another_test_string = " Same thing, but with a string #"
+    harder_test_string = " And when \"'s are in the string, along with # \""   # "and comments are there too"
+    # Things will get harder
+"""
+
+let toml4 = """
 
 # Test file for TOML
 # Only this one tries to emulate a TOML file written by a user of the kind of parser writers probably hate
@@ -240,8 +272,21 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
             ]
 
 """
+;;
 
 
+
+
+printfn "toml 0"
+run parse_toml toml0;;
+printfn "toml 1"
+run parse_toml toml1;;
+printfn "toml 2"
+run parse_toml toml2;;
+printfn "toml 3"
+run parse_toml toml3;;
+printfn "toml 4"
+run parse_toml toml4;;
 
 
 

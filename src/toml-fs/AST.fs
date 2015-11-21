@@ -26,8 +26,8 @@ and [<RequireQualifiedAccess>]
     | Float        of float
     | Bool         of bool
     | DateTime     of DateTime
-    | InlineTable  of (Key,Value) table
-    | Table        of (Key,Value) table     // should this be a value?
+    | InlineTable  of (string,Value) table    // "unwrap" keys for table storage
+    | Table        of (string,Value) table     // should this be a value?
     | Array        of Value list
     override value.ToString () =
         let inline seqstr xs =
