@@ -25,7 +25,7 @@ and [<StructuredFormatDisplay "{Display}">]
                 tbl |> Seq.iter (fun kvp -> 
                     let str = sprintf "%s = %s" kvp.Key (string kvp.Value)
                     sb.AppendLine str |> ignore)
-                string sb
+                "\n"+ string sb
 
         member private toml.Display = toml.ToString()
 
@@ -68,12 +68,12 @@ and [<RequireQualifiedAccess>]
                 sprintf "[| %s|]" ((StringBuilder(),vs) ||> Seq.fold (fun sb elm -> 
                     sb.Append(string elm).Append(", ")) |> string)
             | Table vs       -> 
-                if vs.Count = 1 then sprintf "{( %s )}" (Seq.head vs|> string) else
+                if vs.Count = 1 then sprintf "{[ %s ]}" (Seq.head vs|> string) else
                 let str = 
                     ((StringBuilder(),vs) ||> Seq.fold (fun sb kvp -> 
                         sb.AppendLine(sprintf "%*s = %s" (indent+4) kvp.Key (loop (indent+4) kvp.Value)))) 
                     |> string 
-                sprintf "{(\n%s %*s)}" str (indent-4) ""
+                sprintf "{[\n%s %*s]}" str (indent-4) ""
             | TableArray vs ->
                 let str =
                     ((StringBuilder(),vs) ||> Seq.fold (fun sb arr -> 
