@@ -14,8 +14,6 @@ let inline (|&|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x && pred2 x
 /// Compose predicates with `||`
 let inline (|?|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x || pred2 x
 
-
-
 [<RequireQualifiedAccess>]
 module  List =
     let inline last ls =
@@ -23,6 +21,12 @@ module  List =
             match ls with
             | x::[] -> x | _::tl -> loop tl | [] -> failwith "empty list has no last member"
         loop ls
+
+type Dictionary<'key,'value> with
+    member self.TryAdd (key,value) =
+        if self.ContainsKey key then false else
+        self.Add (key,value); true
+    
 
 type UserState = unit
 type Parser<'t> = Parser<'t,UserState>
@@ -202,11 +206,14 @@ pValueImpl := value_parser .>> skip_tspcs
 
 let toml_item : Parser<_> = toml_key .>>. (skipEqs >>. toml_value) .>> tskipRestOfLine
 
-let toml_toplevel, private pToplevelImpl = createParserForwardedToRef ()
+let toml_table,      private pTableImpl      = createParserForwardedToRef ()
+let toml_tableArray, private pTableArrayImpl = createParserForwardedToRef ()
 
+let toplevel = choice [toml_item;toml_table;toml_tableArray]
 
-let pTable : Parser<_> =
-    ((pTableKey .>> tskipRestOfLine) .>>. (many (toml_toplevel))
+//let pTable : Parser<_> =
+pTableImpl :=
+    ((pTableKey .>> tskipRestOfLine) .>>. (many toplevel)
     |>> fun (ks,items) -> 
         let tk = List.last ks
         let tbl:(_,_) table = table<_,_> ()
@@ -217,8 +224,10 @@ let pTable : Parser<_> =
 //        Value.Table tbl )
 
 
-let pTableArray : Parser<_> =
-    ((pTableArrayKey .>> tskipRestOfLine) .>>. (many toml_toplevel)
+//let pTableArray : Parser<_> =
+pTableArrayImpl :=
+//    ((pTableArrayKey .>> tskipRestOfLine) .>>. (many toml_parser)
+    ((pTableArrayKey .>> tskipRestOfLine) .>>. (many toplevel)
     |>> fun (ks,tbls) -> 
         let ak = List.last ks
         let arr =
@@ -232,35 +241,64 @@ let pTableArray : Parser<_> =
     
 let inline print str x = printfn "%s%A" str x; x
 
-let private toplevel_parser (stream: CharStream<_>) =
-    match stream.Peek () with
-    | '#'  -> (skipComment >>. toml_toplevel .>> skip_tspcs) stream
-    | ' '
-    | '\t' -> (skip_tspcs >>. toml_toplevel .>> skip_tspcs) stream
-    //| '\n' -> (skipUnicodeNewline >>. toml_toplevel .>> skip_tspcs) stream
-    | '['  -> 
-        if stream.Peek2() = TwoChars('[','[') then (pTableArray.>> skip_tspcs) stream else
-        (pTable.>> skip_tspcs ) stream
-    | c when (isDigit|?|isLetter|?|isAnyOf['"';'\'']) c ->
-        (toml_item .>> skip_tspcs) stream
-    | c    -> 
-//        printfn "failchar = %c" c
+let (toml_parser:Parser<(string*Value)list>),   private pTomlImpl   = createParserForwardedToRef ()
+
+
+let private pToml (stream: CharStream<_>) =
+    
+    let rec loop acc (stream: CharStream<_>) =
+        let inline checkReply (psr:Parser<_>) =
+            let state, (reply:Reply<_>)  = stream.State, psr stream
+            if reply.Status <> Ok then stream.BacktrackTo state; acc else
+            (reply.Result::acc)
+
+        match stream.Peek () with
+        | '#'  -> 
+
+            // (skipComment >>. toml_toplevel .>> skip_tspcs) stream
+            stream.SkipRestOfLine(true)
+            loop acc stream
+        | ' '
+        | '\t' -> 
+            // (skip_tspcs >>. toml_toplevel .>> skip_tspcs) stream
+            if not (stream.SkipUnicodeWhitespace ()) then acc else
+            loop acc stream 
+        | '['  -> 
+            if stream.Peek2() = TwoChars('[','[') then 
+                // (pTableArray.>> skip_tspcs) stream else
+                loop (checkReply toml_tableArray) stream
+            else
+                //(pTable.>> skip_tspcs ) stream
+                loop (checkReply toml_table) stream
+        | c when (isDigit|?|isLetter|?|isAnyOf['"';'\'']) c ->
+            //(toml_item .>> skip_tspcs) stream
+            loop (checkReply toml_item) stream
+        | '\n' -> 
+            //(skipUnicodeNewline >>. toml_toplevel) stream
+            if not (stream.SkipUnicodeNewline()) then acc else
+            loop acc stream
+        | _    -> 
+    //        printfn "failchar = %c" c
 //        printfn "Line - %d | Col - %d | Index - %d" 
 //            stream.Position.Line stream.Position.Column stream.Position.Index
-        Reply (Error, expected "A TOML table, array of tables, or a key value pair")
-
-pToplevelImpl := 
+       // Reply (Error, expected "A TOML table, array of tables, or a key value pair")
+            if stream.IsEndOfStream then printfn "reached the end of stream"
+            acc
+    Reply<_>(loop [] stream |> List.rev)
+pTomlImpl := 
    // (skip_tspcs >>. skipUnicodeNewline >>. skip_tspcs) 
    // >>. 
-    toplevel_parser 
+    pToml 
     //.>> skip_tspcs
 
 let parse_toml : Parser<_> = 
-    (many1 (skip_tspcs >>. toml_toplevel .>> skip_tspcs)
+    //(many1 (skip_tspcs >>. toml_toplevel .>> skip_tspcs)
+    (toml_parser
     |>> fun items -> 
         let tbl:(_,_) table = table<_,_> ()
-        List.iter tbl.Add items
-        tbl) .>> (skipUnicodeNewline <|> skipToEOF)
+        List.iter (tbl.TryAdd>>ignore) items
+        TOML tbl) 
+    //.>> (attempt skipToEOF)
 (* 
     ---- NOTES ----
     

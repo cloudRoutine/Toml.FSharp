@@ -231,8 +231,8 @@ run toml_array  "[   \"hello\", \"watup\", \"yo\" ] " ;;
 run toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""" ;;
 run toml_array  "[ 22.04 , 234.00, 23_4.304]" ;;
 run toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]" ;;
-run pTable table0 ;;
-run pTable table1 ;;
+run toml_table table0 ;;
+run toml_table table1 ;;
 
 
 let getResult (res:ParserResult<_,_>) =
