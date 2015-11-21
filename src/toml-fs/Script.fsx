@@ -198,32 +198,32 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
             ]
 
 """
-;;
-[   int0
-    int1
-    int2
-    int3
-    int4    ]    
-|> List.iter (fun x -> run pInt64_toml x |> printfn "%A");;
-
-[   flt0
-    flt1
-    flt2
-    flt3
-    flt4
-    flt5
-    flt6
-    flt7    ]
-|> List.iter (fun x -> run pFloat_toml x |> printfn "%A");;
-
-[
-    date1
-    date2
-    date3
-    date4
-    date5
-    date6   ] 
-|> List.iter (fun x -> run pDateTime_toml x |> printfn "%A");;
+//;;
+//[   int0
+//    int1
+//    int2
+//    int3
+//    int4    ]    
+//|> List.iter (fun x -> run pInt64_toml x |> printfn "%A");;
+//
+//[   flt0
+//    flt1
+//    flt2
+//    flt3
+//    flt4
+//    flt5
+//    flt6
+//    flt7    ]
+//|> List.iter (fun x -> run pFloat_toml x |> printfn "%A");;
+//
+//[
+//    date1
+//    date2
+//    date3
+//    date4
+//    date5
+//    date6   ] 
+//|> List.iter (fun x -> run pDateTime_toml x |> printfn "%A");;
 
 run toml_inlineTable  "{ one = 1, two = 2, three = 3}" ;;
 run toml_string "\"hello\"" ;;
@@ -235,8 +235,14 @@ run pTable table0 ;;
 run pTable table1 ;;
 
 
+let getResult (res:ParserResult<_,_>) =
+    match res with
+    | ParserResult.Success(data,_,_) -> data
+    | _ -> failwith "parser failed"
+
+
 printfn "toml 0"
-run parse_toml toml0;;
+run parse_toml toml0 ;;
 printfn "toml 1"
 run parse_toml toml1;;
 printfn "toml 2"
