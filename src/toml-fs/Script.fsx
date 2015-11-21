@@ -199,13 +199,13 @@ test_string = "You'll hate me after this - #"          # " Annoying, isn't it?
 
 """
 //;;
-//[   int0
-//    int1
-//    int2
-//    int3
-//    int4    ]    
-//|> List.iter (fun x -> run pInt64_toml x |> printfn "%A");;
-//
+[   int0
+    int1
+    int2
+    int3
+    int4    ]    
+|> List.iter (fun x -> run pInt64_toml x |> printfn "%A");;
+
 //[   flt0
 //    flt1
 //    flt2

@@ -91,7 +91,7 @@ let pmult_litstring   : Parser<_> = (between ``|'''|`` ``|'''|`` (manyChars anyC
 
 let toml_string : Parser<_> =
     (choice [ psingle_string; pmult_string; psingle_litstring; pmult_litstring ]
-        |>> Value.String) .>> skip_tspcs
+        |>> fun x -> string x |> Value.String) .>> skip_tspcs
 
 
 (*| Numeric Parsers |*)
@@ -226,33 +226,39 @@ pTableArrayImpl :=
     
 let inline private print str x = printfn "%s%A" str x; x
 
+
 let toml_parser (stream: CharStream<_>) =
-    let mutable loopcount = 0
-    let rec loop acc (stream: CharStream<_>) =
-        loopcount <- loopcount + 1
-        if loopcount > 20000 then printfn "looped %d times\nwas likely stuck in infinite loop" loopcount; acc else
+
+    let inline makeReply (acc:(_*_) Reply list)= 
+        acc |> (List.rev >> List.map (fun r -> r.Result) >> Reply<_>)
+
+    let rec loop acc (stream: CharStream<_>) : (string*Value) list Reply =
+
         let inline checkReply (psr:Parser<_>) =
-            let state, (reply:Reply<_>)  = stream.State, psr stream
-            if reply.Status <> Ok then stream.BacktrackTo state; acc else
-            (reply.Result::acc)
+            let state, (reply: _ Reply)  = stream.State, psr stream
+            if reply.Status <> Ok then stream.BacktrackTo state; Reply (Error, reply.Error) else 
+            loop (reply::acc) stream
 
         match stream.Peek () with
         | '#'  -> stream.SkipRestOfLine true; loop acc stream
         | ' '
-        | '\t' -> if not (stream.SkipUnicodeWhitespace ()) then acc else loop acc stream 
+        | '\t' -> if not (stream.SkipUnicodeWhitespace ()) then (makeReply acc) else loop acc stream 
         | '['  -> 
-            if stream.Peek2() = TwoChars('[','[') then 
-                loop (checkReply toml_tableArray) stream
-            else loop (checkReply toml_table) stream
+            if stream.Peek2 () = TwoChars ('[','[') then 
+                checkReply toml_tableArray
+            else checkReply toml_table
         | c when (isDigit|?|isLetter|?|isAnyOf['"';'\'']) c ->
-            loop (checkReply toml_item) stream
-        | '\n' -> if not (stream.SkipUnicodeNewline()) then acc else loop acc stream
-        | _    -> 
-            if stream.IsEndOfStream then printf "reached the end of stream" 
-            acc
-    Reply<_>(loop [] stream |> List.rev)
+            checkReply toml_item
+        | '\n' -> if not (stream.SkipUnicodeNewline ()) then makeReply acc else loop acc stream
+        | c   -> 
+            if stream.IsEndOfStream then makeReply acc else
+            let lastError =
+                (expected <| sprintf "could not parse unexpected character -'%c'\
+                                        at Ln: %d Col: %d" c stream.Line stream.Column)
+            let errorls = (lastError,acc) ||> List.fold (fun acc elm -> mergeErrors acc elm.Error)
+            Reply (Error, errorls)
+    loop [] stream 
 
-//pTomlImpl :=  pToml 
 
 let parse_toml : Parser<_> = 
     toml_parser |>> fun items -> 
