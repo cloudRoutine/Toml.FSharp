@@ -7,7 +7,11 @@
 open System 
 open FParsec
 open TomlFs.AST
+open TomlFs.TomlState
 open TomlFs.Parsers
+
+let inline runtoml psr str = runParserOnString psr (TomlState.init()) "" str
+
 
 let date1 = "1979-05-27T07:32:00Z"
 let date2 = "1979-05-27T00:32:00-07:00"
@@ -252,5 +256,33 @@ run parse_toml toml3;;
 printfn "toml 4"
 run parse_toml toml4;;
 
-
+//
+//
+//runtoml toml_inlineTable  "{ one = 1, two = 2, three = 3}" ;;
+//runtoml toml_string "\"hello\"" ;;
+//runtoml toml_array  "[   \"hello\", \"watup\", \"yo\" ] " ;;
+//runtoml toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""" ;;
+//runtoml toml_array  "[ 22.04 , 234.00, 23_4.304]" ;;
+//runtoml toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]" ;;
+//runtoml toml_table table0 ;;
+//runtoml toml_table table1 ;;
+//
+//
+//let getResult (res:ParserResult<_,_>) =
+//    match res with
+//    | ParserResult.Success(data,_,_) -> data
+//    | _ -> failwith "parser failed"
+//
+//
+//printfn "toml 0"
+//runtoml parse_toml toml0 ;;
+//printfn "toml 1"
+//runtoml parse_toml toml1;;
+//printfn "toml 2"
+//runtoml parse_toml toml2;;
+//printfn "toml 3"
+//runtoml parse_toml toml3;;
+//printfn "toml 4"
+//runtoml parse_toml toml4;;
+//
 

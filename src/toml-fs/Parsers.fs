@@ -5,6 +5,7 @@ open System.Collections.Generic
 open FParsec
 open FParsec.Primitives
 open TomlFs.AST
+open TomlFs.TomlState
 
 (*| Helpers |*)
 
@@ -21,14 +22,11 @@ module  List =
             match ls with
             | x::[] -> x | _::tl -> loop tl | [] -> failwith "empty list has no last member"
         loop ls
-
-type Dictionary<'key,'value> with
-    member self.TryAdd (key,value) =
-        if self.ContainsKey key then false else
-        self.Add (key,value); true
-    
-type UserState  = unit
+type UserState = unit    
+//type Parser<'t> = Parser<'t,TomlState>
 type Parser<'t> = Parser<'t,UserState>
+//type Parser<'t> = Parser<'t,String>
+
 
 (*| Whitespace Parsers |*)
 
@@ -41,6 +39,7 @@ let skip_toml_spaces : Parser<_> = skipManySatisfy ws
 let tspc       = toml_space
 let tspcs      = toml_spaces
 let skip_tspcs = skip_toml_spaces
+
 
 (*| Comment/LineEnd Parsers |*)
 
@@ -57,7 +56,6 @@ let spcblock: Parser<_> =
 
 let ``.``   : Parser<_> = pchar '.' .>> skip_tspcs 
 let ``,``   : Parser<_> = pchar ',' .>> skip_tspcs   
-
 let ``[``   : Parser<_> = pchar '[' .>> skip_tspcs              
 let ``]``   : Parser<_> = pchar ']' .>> skip_tspcs   
 let ``{``   : Parser<_> = pchar '{' .>> skip_tspcs   
@@ -69,13 +67,28 @@ let ``'``   : Parser<_> = pchar '\''
 let ``"""`` : Parser<_> = pstring "\"\"\""
 let ``'''`` : Parser<_> = pstring "\'\'\'"
 
+let inline isEscChar c = c = '\\'
+// parsers for string bounds that won't be fooled by escaped quotes
 let prevCharNot = previousCharSatisfiesNot
-let ``|"|``   : Parser<_> = prevCharNot((=)'\\') >>. pchar '"'
-let ``|'|``   : Parser<_> = prevCharNot((=)'\\') >>. pchar '\''
-let ``|"""|`` : Parser<_> = prevCharNot((=)'\\') >>. pstring "\"\"\""
-let ``|'''|`` : Parser<_> = prevCharNot((=)'\\') >>. pstring "\'\'\'"
+let prevCharIs  = previousCharSatisfies 
+let ``|"|``   : Parser<_> = prevCharNot isEscChar >>. pchar '"'
+let ``|'|``   : Parser<_> = prevCharNot isEscChar >>. pchar '\''
+let ``|"""|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\"\"\""
+let ``|'''|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\'\'\'"
 let skipEqs   : Parser<_> = skipChar '=' >>. skip_tspcs
 
+
+let combo = [ 0x00..0x1f ] |> List.reduce (fun acc elm -> acc ||| elm)
+
+// let [<Literal>] unicodeCtrlChar = combo
+let [<Literal>] unicodeCtrlChar = 0x00 ||| 0x01 ||| 0x1f // ||| ... 
+
+
+// unicode control chars
+let ctrlChar  : Parser<_> = 
+    prevCharIs isEscChar 
+    >>. satisfyL (isAnyOf [for hex in 0x00..0x1f -> char hex]) 
+        "Unicode control charaters must be escaped"
 
 (*| String Parsers |*)
 
@@ -83,22 +96,22 @@ let skipEqs   : Parser<_> = skipChar '=' >>. skip_tspcs
 // probably need to make a low level string parser
 let psingle_string    : Parser<_> = 
     between ``|"|`` ``|"|`` 
-        (manyChars ((previousCharSatisfies ((=)'\\')>>.``"``)<|> satisfy ((<>)'"'))) 
+        (manyChars ((prevCharIs isEscChar >>. ``"``) <|> satisfy ((<>)'"'))) 
 
-let pmult_string      : Parser<_> = (between ``|"""|`` ``|"""|`` (manyChars anyChar) )
-let psingle_litstring : Parser<_> = (between ``|'|`` ``|'|`` (manySatisfy ((<>)'\'')))
-let pmult_litstring   : Parser<_> = (between ``|'''|`` ``|'''|`` (manyChars anyChar) )
+let pmult_string      : Parser<_> = between ``|"""|`` ``|"""|`` (manyChars anyChar)
+let psingle_litstring : Parser<_> = between ``|'|``   ``|'|``   (manySatisfy (isNoneOf['\'']))
+let pmult_litstring   : Parser<_> = between ``|'''|`` ``|'''|`` (manyChars anyChar)
 
 let toml_string : Parser<_> =
-    (choice [ psingle_string; pmult_string; psingle_litstring; pmult_litstring ]
-        |>> fun x -> string x |> Value.String) .>> skip_tspcs
+    (choice [psingle_string; pmult_string; psingle_litstring; pmult_litstring]
+        |>> Value.String) .>> skip_tspcs
 
 
 (*| Numeric Parsers |*)
 
 let pInt64_toml : Parser<_> = 
     followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
-    >>. many1Chars (skipChar '_' >>. digit <|> digit)
+    >>. many1Chars (prevCharIs isDigit >>. skipChar '_' >>. digit <|> digit)
     .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
     |>> int64
 
@@ -139,7 +152,7 @@ let toml_key       : Parser<_> = (choice [pBareKey; pQuoteKey ]).>> skip_tspcs
 
 // toplevel keys
 let pTableKey      : Parser<_> = between ``[`` ``]`` (sepBy toml_key ``.``)
-let pTableArrayKey : Parser<_> = between ``[[`` ``]]`` (sepBy toml_key ``.``)
+let pArrayOfTablesKey : Parser<_> = between ``[[`` ``]]`` (sepBy toml_key ``.``)
 
 
 (*  Collection Parsers *)
@@ -181,8 +194,7 @@ let private value_parser (stream: CharStream<_>) =
     | c when isDigit c ->
         // A Date time will always have a `-` at this position e.g. 
         if stream.Peek 4 = '-' then toml_datetime stream else
-        let state = stream.State
-        let reply = toml_int stream
+        let state, reply = stream.State, toml_int stream
         if reply.Status = Ok then reply else
         // if parsing for an int fails, backtrack and try a float
         stream.BacktrackTo state
@@ -197,74 +209,122 @@ pValueImpl := value_parser .>> skip_tspcs
         
 (*| Toplevel Parsers |*)
 
-let toml_item : Parser<_> = toml_key .>>. (skipEqs >>. toml_value) .>> tskipRestOfLine
+let parseIntoTableArray (parseKey:string list, inlineTables) =
+    // parsekey of a tablearray gives us the table that stores this inlinetable
+    // and the key for this inlinetable
+    let intbl =
+        (table<_,_>(), inlineTables) 
+        ||> List.fold (fun tbl (key,value) -> tbl.Add(key,value); tbl) 
+    parseKey, Value.InlineTable intbl
 
-let toml_table,      private pTableImpl      = createParserForwardedToRef ()
-let toml_tableArray, private pTableArrayImpl = createParserForwardedToRef ()
 
-let toplevel = choice [toml_item;toml_table;toml_tableArray]
+//let toplevel = choice [toml_item;toml_table;toml_tableArray]
 
-pTableImpl :=
-    ((pTableKey .>> tskipRestOfLine) .>>. (many toplevel)
-    |>> fun (ks,items) -> 
-        let tk = List.last ks
-        let tbl:(_,_) table = table<_,_> ()
-        List.iter (tbl.Add) items
-        tk,Value.Table tbl )
-        .>> choice[attempt skipUnicodeNewline; attempt skip_tspcs]
+//pTableImpl := (pTableKey .>> tskipRestOfLine) .>>. (many toml_item)
+//    |>> fun (ks,items) -> 
+//        let tk = List.last ks
+//        let tbl:(_,_) table = table<_,_> ()
+//        List.iter (tbl.Add) items
+//        tk, tbl )
 
-pTableArrayImpl :=
-    (pTableArrayKey .>> tskipRestOfLine) .>>. (many toplevel)
-    |>> fun (ks,tbls) -> 
-        let ak = List.last ks
-        let arr =
-            tbls |> List.map (fun (key,value) -> 
-            let tbl:(_,_) table = table<_,_> ()
-            tbl.Add(key,value)
-            tbl) 
-        ak, Value.TableArray arr
+
+//pTableArrayImpl := ((pArrayOfTablesKey .>> tskipRestOfLine) .>>. many toml_item)
+//    |>> fun ((aotkey:string list),items) -> 
+//        let ak = List.last ks
+//        let arr =
+//            tbls |> List.map (fun (key,value) -> 
+//            let tbl:(_,_) table = table<_,_> ()
+//            tbl.Add(key,value)
+//            tbl) 
+//        ak, Value.TableArray arr
+
     
 let inline private print str x = printfn "%s%A" str x; x
 
 
+let toml_table, private pTableImpl = createParserForwardedToRef ()
+let toml_aot, private pArrOfTablesImpl = createParserForwardedToRef ()
+
+let inline listToKey keys = String.concat "." keys
+let inline keyToList (key:string) = key.Split '.' |> Array.toList
+
+
+let makeTable (vals: #seq<string*Value>): (_,_)table =
+    let tbl = table<_,_>() 
+    tbl.AddMany vals 
+    tbl
+
+let toml_tablekey =  (pTableKey .>> tskipRestOfLine) 
+
+let toml_item = 
+    ((toml_key .>>.  (skipEqs >>. toml_value)) .>> tskipRestOfLine);
+
+pTableImpl := 
+    (pTableKey .>> tskipRestOfLine) 
+    .>>. (many toml_item)
+
+pArrOfTablesImpl :=
+    many ((pArrayOfTablesKey .>> tskipRestOfLine) .>>. many toml_item)
+
+
 let toml_parser (stream: CharStream<_>) =
+    let toml = TOML (table<_,_> ())
 
-    let inline makeReply (acc:(_*_) Reply list)= 
-        acc |> (List.rev >> List.map (fun r -> r.Result) >> Reply<_>)
-
-    let rec loop acc (stream: CharStream<_>) : (string*Value) list Reply =
+    let rec loop acc (stream: CharStream<_>) : _ Reply =
 
         let inline checkReply (psr:Parser<_>) =
             let state, (reply: _ Reply)  = stream.State, psr stream
             if reply.Status <> Ok then stream.BacktrackTo state; Reply (Error, reply.Error) else 
-            loop (reply::acc) stream
+            loop reply stream
+
+        let tablels (tbl:table<string,Value>) = 
+            tbl |> Seq.map(fun kvp -> (kvp.Key,kvp.Value)) |>List.ofSeq
+
+        let rec addItems keybase ls =
+            match ls with 
+            | [] -> toml
+            | (k,v)::tl ->
+                let key = String.concat "" [keybase;".";k]
+                match v with
+                | Value.Table tbl -> addItems key (tablels tbl)
+                | Value.ArrayOfTables ars ->
+                    let arr = (List.map Value.InlineTable ars)
+                    if toml.ContainsKey key then 
+                        match toml.[key] with
+                        | Value.Array ls ->
+                            toml.[key] <- Value.Array(ls@arr); addItems keybase tl
+                        | _ ->  addItems keybase tl
+                    else
+                        toml.Add(key,Value.Array arr); addItems key tl
+                | v ->  toml.Add(key,v); addItems keybase tl
 
         match stream.Peek () with
         | '#'  -> stream.SkipRestOfLine true; loop acc stream
-        | ' '
-        | '\t' -> if not (stream.SkipUnicodeWhitespace ()) then (makeReply acc) else loop acc stream 
+        | ' ' | '\t' -> if not (stream.SkipUnicodeWhitespace ()) then acc else loop acc stream 
         | '['  -> 
             if stream.Peek2 () = TwoChars ('[','[') then 
-                checkReply toml_tableArray
-            else checkReply toml_table
+                checkReply (toml_aot|>> fun arrs ->
+                    arrs |> List.iter (fun (tkey,items) -> addItems (listToKey tkey) items |> ignore) 
+                    toml)
+            else 
+                checkReply (toml_table |>> fun (tkey,items) -> addItems (listToKey tkey) items)
         | c when (isDigit|?|isLetter|?|isAnyOf['"';'\'']) c ->
-            checkReply toml_item
-        | '\n' -> if not (stream.SkipUnicodeNewline ()) then makeReply acc else loop acc stream
+            checkReply (toml_item|>> fun (key,value) ->
+                toml.Add (key,value)
+                toml)
+        | '\n' -> if not (stream.SkipUnicodeNewline ()) then acc else loop acc stream
         | c   -> 
-            if stream.IsEndOfStream then makeReply acc else
-            let lastError =
-                (expected <| sprintf "could not parse unexpected character -'%c'\
-                                        at Ln: %d Col: %d" c stream.Line stream.Column)
-            let errorls = (lastError,acc) ||> List.fold (fun acc elm -> mergeErrors acc elm.Error)
-            Reply (Error, errorls)
-    loop [] stream 
+            if stream.IsEndOfStream then acc else
+                let lastError =
+                    (expected <| sprintf "could not parse unexpected character -'%c'\
+                                            at Ln: %d Col: %d" c stream.Line stream.Column)
+                let errorls = mergeErrors acc.Error lastError
+                Reply (Error, errorls)
+    loop (Reply<_>()) stream
 
 
-let parse_toml : Parser<_> = 
-    toml_parser |>> fun items -> 
-        let tbl:(_,_) table = table<_,_> ()
-        List.iter (tbl.TryAdd>>ignore) items
-        TOML tbl 
+
+let parse_toml = fun stream -> toml_parser stream
 
 (* 
     ---- NOTES ----
