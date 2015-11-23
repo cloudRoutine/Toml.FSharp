@@ -29,12 +29,9 @@ type Parser<'t> = Parser<'t,UserState>
 (*| Whitespace/Comment/LineEnd AKA Skip Parsers |*)
 
 /// toml approved whitespace is ' ' or '\t'
-let ws               = isAnyOf [' ';'\t']
-let skip_toml_spaces = skipManySatisfy ws
-let skip_tspcs       = skip_toml_spaces
-let skipComment      = skipChar '#' >>. skipRestOfLine  true
-let tskipRestOfLine  = skipComment <|>  skipRestOfLine  true
-let tskipper         = skipMany (choice [skip_tspcs; tskipRestOfLine])
+let skip_tspcs       = skipManySatisfy (isAnyOf [' ';'\t'])
+let tskipRestOfLine  = choice [ skipChar '#' >>. skipRestOfLine  true  
+                                skipRestOfLine  true ]
 
 
 (*| Punctuation Parsers |*)
@@ -117,14 +114,12 @@ let toml_string   = pString_toml    |>> Value.String
 (*| Key Parsers |*)
 
 // key formats
-let pBareKey       : Parser<_> = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
-let pQuoteKey      : Parser<_> = between ``"`` ``"`` (many1Chars anyChar) 
-
+let pBareKey          : Parser<_> = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
+let pQuoteKey         : Parser<_> = between ``"`` ``"`` (many1Chars anyChar) 
 // key in a collection
-let toml_key       : Parser<_> = (choice [pBareKey; pQuoteKey ]).>> skip_tspcs
-
+let toml_key          : Parser<_> = (choice [pBareKey; pQuoteKey ]) .>> skip_tspcs
 // toplevel keys
-let pTableKey      : Parser<_> = between ``[`` ``]`` (sepBy toml_key ``.``)
+let pTableKey         : Parser<_> = between ``[``   ``]`` (sepBy toml_key ``.``)
 let pArrayOfTablesKey : Parser<_> = between ``[[`` ``]]`` (sepBy toml_key ``.``)
 
 
@@ -132,29 +127,27 @@ let pArrayOfTablesKey : Parser<_> = between ``[[`` ``]]`` (sepBy toml_key ``.``)
 
 // Forward declaration to allow mutually recursive 
 // parsers between arrays and inline tables
-let toml_value,       private pValueImpl  = createParserForwardedToRef ()
-let toml_array,       private pArrayImpl  = createParserForwardedToRef ()
+let toml_value      , private pValueImpl  = createParserForwardedToRef ()
+let toml_array      , private pArrayImpl  = createParserForwardedToRef ()
 let toml_inlineTable, private pITblImpl   = createParserForwardedToRef ()
 
-let pKVP : Parser<_>  =  
-    skip_tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
+let pKVP : Parser<_>  = skip_tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
 
-let parr : Parser<_> = 
-    let ``[``:Parser<_> = (attempt (``[`` .>> unicodeNewline .>> skip_tspcs)) <|> ``[`` 
-    let ``]``:Parser<_> = (attempt (skip_tspcs .>> unicodeNewline .>> skip_tspcs >>. ``]``)) <|> ``]`` 
-    let ``,``:Parser<_> = (attempt (``,`` .>> unicodeNewline .>> skip_tspcs)) <|> ``,`` 
-    between  
-        ``[`` ``]`` (sepBy toml_value ``,``) |>> Value.Array
+let pArray_toml : Parser<_> = 
+    let ``[``   : Parser<_> = (attempt (``[`` .>> unicodeNewline .>> skip_tspcs)) <|> ``[`` 
+    let ``]``   : Parser<_> = (attempt (skip_tspcs .>> unicodeNewline .>> skip_tspcs >>. ``]``)) <|> ``]`` 
+    let ``,``   : Parser<_> = (attempt (``,`` .>> unicodeNewline .>> skip_tspcs)) <|> ``,`` 
+    between ``[`` ``]`` (sepBy toml_value ``,``) 
 
-pArrayImpl := parr .>> skip_tspcs
-
-pITblImpl :=
-    (between ``{`` ``}`` (sepBy pKVP ``,``)
+let pInlineTable : Parser<_> =
+    between ``{`` ``}`` (sepBy pKVP ``,``)
     |>> fun items ->
         let tbl:(_,_) table = table<_,_> ()
         List.iter tbl.Add items
-        Value.InlineTable tbl)
-        .>> skip_tspcs
+        tbl
+
+pArrayImpl := pArray_toml  |>> Value.Array       .>> skip_tspcs
+pITblImpl  := pInlineTable |>> Value.InlineTable .>> skip_tspcs
 
 // low level parser implementation for simple toml values
 /// parses strings, ints, floats, bools, datetimes, inline tables, and arrays
@@ -193,11 +186,11 @@ let ``]]+`` = pstring "]]" .>> skip_tspcs
 
 let ptkey : Parser<_> =  
     ``[+``.>>. (sepBy toml_key ``.``) .>>. ``]+``
-    |>> fun ((b,ls),e) -> String.concat "" [b;listToKey ls;e]
+    |>> fun ((b,ls),e) -> String.concat "" [b; listToKey ls; e]
 
 let pakey : Parser<_> = 
     ``[[+``.>>. (sepBy toml_key ``.``) .>>. ``]]+``
-    |>> fun ((b,ls),e) -> String.concat "" [b;listToKey ls;e]
+    |>> fun ((b,ls),e) -> String.concat "" [b; listToKey ls; e]
 
 let content_block =
     manyCharsTill anyChar (followedByL(pakey<|>ptkey) "expected a table or array table key"<|>eof)
@@ -263,36 +256,11 @@ let parseIntoTableArray (parseKey:string list, inlineTables) =
         (table<_,_>(), inlineTables) 
         ||> List.fold (fun tbl (key,value) -> tbl.Add(key,value); tbl) 
     parseKey, Value.InlineTable intbl
-
-
-//let toplevel = choice [toml_item;toml_table;toml_tableArray]
-
-//pTableImpl := (pTableKey .>> tskipRestOfLine) .>>. (many toml_item)
-//    |>> fun (ks,items) -> 
-//        let tk = List.last ks
-//        let tbl:(_,_) table = table<_,_> ()
-//        List.iter (tbl.Add) items
-//        tk, tbl )
-
-
-//pTableArrayImpl := ((pArrayOfTablesKey .>> tskipRestOfLine) .>>. many toml_item)
-//    |>> fun ((aotkey:string list),items) -> 
-//        let ak = List.last ks
-//        let arr =
-//            tbls |> List.map (fun (key,value) -> 
-//            let tbl:(_,_) table = table<_,_> ()
-//            tbl.Add(key,value)
-//            tbl) 
-//        ak, Value.TableArray arr
-
     
 let inline private print str x = printfn "%s%A" str x; x
 
-
-let toml_table, private pTableImpl = createParserForwardedToRef ()
-let toml_aot, private pArrOfTablesImpl = createParserForwardedToRef ()
-
-
+let toml_table, private pTableImpl       = createParserForwardedToRef ()
+let toml_aot  , private pArrOfTablesImpl = createParserForwardedToRef ()
 
 let makeTable (vals: #seq<string*Value>): (_,_)table =
     let tbl = table<_,_>() 
@@ -301,15 +269,8 @@ let makeTable (vals: #seq<string*Value>): (_,_)table =
 
 let toml_tablekey = (pTableKey .>> tskipRestOfLine) 
 
-
-
-
-
-pTableImpl := 
-    (pTableKey .>> tskipRestOfLine).>>. (many toml_item)
-
-pArrOfTablesImpl :=
-    many ((pArrayOfTablesKey .>> tskipRestOfLine) .>>. many toml_item)
+pTableImpl       := (pTableKey .>> tskipRestOfLine).>>. (many toml_item)
+pArrOfTablesImpl := many ((pArrayOfTablesKey .>> tskipRestOfLine) .>>. many toml_item)
 
 (*
     Rewrite parser to split on 
