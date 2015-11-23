@@ -21,44 +21,30 @@ module  List =
             match ls with
             | x::[] -> x | _::tl -> loop tl | [] -> failwith "empty list has no last member"
         loop ls
+
 type UserState = unit    
-//type Parser<'t> = Parser<'t,TomlState>
 type Parser<'t> = Parser<'t,UserState>
-//type Parser<'t> = Parser<'t,String>
 
 
-(*| Whitespace Parsers |*)
+(*| Whitespace/Comment/LineEnd AKA Skip Parsers |*)
 
 /// toml approved whitespace is ' ' or '\t'
-let ws = isAnyOf [' ';'\t']
-let toml_space       : Parser<_> = satisfy ws
-let toml_spaces      : Parser<_> = manySatisfy ws
-let skip_toml_spaces : Parser<_> = skipManySatisfy ws
-
-let tspc       = toml_space
-let tspcs      = toml_spaces
-let skip_tspcs = skip_toml_spaces
-
-
-(*| Comment/LineEnd Parsers |*)
-
-let skipComment     : Parser<_> = skipChar '#' >>. skipRestOfLine  true
-let tskipRestOfLine : Parser<_> = skipComment <|>  skipRestOfLine  true
-let tskipper = skipMany (choice [skip_tspcs; tskipRestOfLine])
-
-let spcblock: Parser<_> = 
-    skipMany(choice [   skip_tspcs .>> skipUnicodeNewline 
-                        skip_tspcs .>> tskipRestOfLine      ])
+let ws               = isAnyOf [' ';'\t']
+let skip_toml_spaces = skipManySatisfy ws
+let skip_tspcs       = skip_toml_spaces
+let skipComment      = skipChar '#' >>. skipRestOfLine  true
+let tskipRestOfLine  = skipComment <|>  skipRestOfLine  true
+let tskipper         = skipMany (choice [skip_tspcs; tskipRestOfLine])
 
 
 (*| Punctuation Parsers |*)
 
-let ``.``   : Parser<_> = pchar '.' .>> skip_tspcs 
-let ``,``   : Parser<_> = pchar ',' .>> skip_tspcs   
-let ``[``   : Parser<_> = pchar '[' .>> skip_tspcs              
-let ``]``   : Parser<_> = pchar ']' .>> skip_tspcs   
-let ``{``   : Parser<_> = pchar '{' .>> skip_tspcs   
-let ``}``   : Parser<_> = pchar '}' .>> skip_tspcs    
+let ``.``   : Parser<_> = pchar   '.'  .>> skip_tspcs 
+let ``,``   : Parser<_> = pchar   ','  .>> skip_tspcs   
+let ``[``   : Parser<_> = pchar   '['  .>> skip_tspcs              
+let ``]``   : Parser<_> = pchar   ']'  .>> skip_tspcs   
+let ``{``   : Parser<_> = pchar   '{'  .>> skip_tspcs   
+let ``}``   : Parser<_> = pchar   '}'  .>> skip_tspcs    
 let ``[[``  : Parser<_> = pstring "[[" .>> skip_tspcs  
 let ``]]``  : Parser<_> = pstring "]]" .>> skip_tspcs  
 let ``"``   : Parser<_> = pchar '"'
@@ -76,12 +62,7 @@ let ``|"""|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\"\"\""
 let ``|'''|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\'\'\'"
 let skipEqs   : Parser<_> = skipChar '=' >>. skip_tspcs
 
-
 let combo = [ 0x00..0x1f ] |> List.reduce (fun acc elm -> acc ||| elm)
-
-// let [<Literal>] unicodeCtrlChar = combo
-let [<Literal>] unicodeCtrlChar = 0x00 ||| 0x01 ||| 0x1f // ||| ... 
-
 
 // unicode control chars
 let ctrlChar  : Parser<_> = 
@@ -89,37 +70,33 @@ let ctrlChar  : Parser<_> =
     >>. satisfyL (isAnyOf [for hex in 0x00..0x1f -> char hex]) 
         "Unicode control charaters must be escaped"
 
+
 (*| String Parsers |*)
 
 // TODO - fully implement string spec
 // probably need to make a low level string parser
-let psingle_string    : Parser<_> = 
-    between ``|"|`` ``|"|`` 
-        (manyChars ((prevCharIs isEscChar >>. ``"``) <|> satisfy ((<>)'"'))) 
 
+let psingle_string    : Parser<_> = between ``|"|``   ``|"|``   (manyChars (choice
+                                                                   [prevCharIs isEscChar >>. ``"``
+                                                                    satisfy (isNoneOf['"'])]))
 let pmult_string      : Parser<_> = between ``|"""|`` ``|"""|`` (manyChars anyChar)
 let psingle_litstring : Parser<_> = between ``|'|``   ``|'|``   (manySatisfy (isNoneOf['\'']))
 let pmult_litstring   : Parser<_> = between ``|'''|`` ``|'''|`` (manyChars anyChar)
-
-let toml_string : Parser<_> =
-    (choice [psingle_string; pmult_string; psingle_litstring; pmult_litstring]
-        |>> Value.String) .>> skip_tspcs
+let pString_toml      : Parser<_> =
+    choice [psingle_string; pmult_string; psingle_litstring; pmult_litstring] .>> skip_tspcs
 
 
-(*| Numeric Parsers |*)
+(*| Simple Value Parsers |*)
 
 let pInt64_toml : Parser<_> = 
     followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
     >>. many1Chars (prevCharIs isDigit >>. skipChar '_' >>. digit <|> digit)
-    .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
-    |>> int64
-
+    .>> notFollowedByL ``.`` "TOML ints cannot contain `.`" |>> int64
 
 let pFloat_toml : Parser<_> = 
     let floatChar = satisfy (isDigit|?|isAnyOf['e';'E';'+';'-';'.'])
     followedByL (satisfy ((<>)'0')) "TOML floats cannot begin with leading 0s"  
-    >>. many1Chars (skipChar '_' >>. floatChar <|> floatChar)
-    |>> float
+    >>. many1Chars (skipChar '_' >>. floatChar <|> floatChar) |>> float
 
 let private toDateTime str =
     let mutable dt = Unchecked.defaultof<DateTime>
@@ -128,16 +105,13 @@ let private toDateTime str =
     | true  -> dt
 
 let pDateTime_toml : Parser<_> = manySatisfy (isDigit|?|isAnyOf['T';':';'.';'-';'Z']) |>> toDateTime
+let pBool_toml     : Parser<_> = (pstring "false" >>% false) <|> (pstring "true" >>% true)
 
-let toml_int      = pInt64_toml    |>> Value.Int
-let toml_float    = pFloat_toml    |>> Value.Float
-let toml_datetime = pDateTime_toml |>> Value.DateTime
-
-(*| Simple Value Parsers |*)
-
-let pBool_toml : Parser<_> = (pstring "false" >>% false) <|> (pstring "true" >>% true)
-
-let toml_bool = pBool_toml |>> Value.Bool
+let toml_int      = pInt64_toml     |>> Value.Int
+let toml_float    = pFloat_toml     |>> Value.Float
+let toml_datetime = pDateTime_toml  |>> Value.DateTime
+let toml_bool     = pBool_toml      |>> Value.Bool
+let toml_string   = pString_toml    |>> Value.String
 
 
 (*| Key Parsers |*)
@@ -163,7 +137,7 @@ let toml_array,       private pArrayImpl  = createParserForwardedToRef ()
 let toml_inlineTable, private pITblImpl   = createParserForwardedToRef ()
 
 let pKVP : Parser<_>  =  
-    tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
+    skip_tspcs >>. toml_key .>>. (skipEqs >>. toml_value)
 
 let parr : Parser<_> = 
     let ``[``:Parser<_> = (attempt (``[`` .>> unicodeNewline .>> skip_tspcs)) <|> ``[`` 
@@ -211,6 +185,7 @@ pValueImpl := value_parser .>> skip_tspcs
 let inline listToKey keys = String.concat "." keys
 let inline keyToList (key:string) = key.Split '.' |> Array.toList
 
+// Brace matching parsers that store the chars unlike preceding versions
 let ``[+``  = pstring "["  .>> skip_tspcs 
 let ``]+``  = pstring "]"  .>> skip_tspcs
 let ``[[+`` = pstring "[[" .>> skip_tspcs 
@@ -230,6 +205,7 @@ let content_block =
 let toml_item = 
     ((toml_key .>>. (skipEqs >>. toml_value)) .>> tskipRestOfLine)
 
+/// Parse the beginning of the TOML file, before the first table or array table definition
 let toml_start : Parser<_> =
     skipManyTill anyChar (followedByL toml_item "expected a toml item")
     >>. (many (skip_tspcs>>. toml_item))
@@ -240,6 +216,7 @@ let foldErrors init (ls:Reply<_> list) =
 let mergeResult (rs:Reply<_> list) =
     let output = ([],rs) ||> List.fold (fun acc elm -> elm.Result::acc)
     Reply (Ok,output,NoErrorMessages)
+
 
 // split the TOML file up into sections by their table keys
 let section_parser (stream: CharStream<_>) =
