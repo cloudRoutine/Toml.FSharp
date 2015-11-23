@@ -5,7 +5,6 @@ open System.Collections.Generic
 open FParsec
 open FParsec.Primitives
 open TomlFs.AST
-open TomlFs.TomlState
 
 (*| Helpers |*)
 
@@ -209,6 +208,77 @@ pValueImpl := value_parser .>> skip_tspcs
         
 (*| Toplevel Parsers |*)
 
+let inline listToKey keys = String.concat "." keys
+let inline keyToList (key:string) = key.Split '.' |> Array.toList
+
+let ``[+``  = pstring "["  .>> skip_tspcs 
+let ``]+``  = pstring "]"  .>> skip_tspcs
+let ``[[+`` = pstring "[[" .>> skip_tspcs 
+let ``]]+`` = pstring "]]" .>> skip_tspcs
+
+let ptkey : Parser<_> =  
+    ``[+``.>>. (sepBy toml_key ``.``) .>>. ``]+``
+    |>> fun ((b,ls),e) -> String.concat "" [b;listToKey ls;e]
+
+let pakey : Parser<_> = 
+    ``[[+``.>>. (sepBy toml_key ``.``) .>>. ``]]+``
+    |>> fun ((b,ls),e) -> String.concat "" [b;listToKey ls;e]
+
+let content_block =
+    manyCharsTill anyChar (followedByL(pakey<|>ptkey) "expected a table or array table key"<|>eof)
+
+let toml_item = 
+    ((toml_key .>>. (skipEqs >>. toml_value)) .>> tskipRestOfLine)
+
+let toml_start : Parser<_> =
+    skipManyTill anyChar (followedByL toml_item "expected a toml item")
+    >>. (many (skip_tspcs>>. toml_item))
+
+let foldErrors init (ls:Reply<_> list) =
+    (init, ls) ||> List.fold (fun acc elm -> mergeErrors acc elm.Error)
+
+let mergeResult (rs:Reply<_> list) =
+    let output = ([],rs) ||> List.fold (fun acc elm -> elm.Result::acc)
+    Reply (Ok,output,NoErrorMessages)
+
+// split the TOML file up into sections by their table keys
+let section_parser (stream: CharStream<_>) =
+    
+    let rec loop acc stream =
+
+        let inline checkReply (psr:Parser<_>) acc =
+            let (reply: _ Reply) =  psr stream
+            if reply.Status <> Ok then Reply (Error, reply.Error) 
+            else loop (reply::acc) stream
+
+        match stream.Peek () with
+        | '['  ->   
+            if stream.Peek2 () = TwoChars ('[','[') 
+            then checkReply (pakey.>>.content_block) acc 
+            else checkReply (ptkey.>>.content_block) acc  
+        |'#' -> 
+            stream.SkipRestOfLine true 
+            loop acc stream
+        |' '|'\t' -> 
+            stream.SkipUnicodeWhitespace() |> ignore 
+            loop acc stream 
+      
+        | '\n' -> 
+            if not (stream.SkipUnicodeNewline ()) 
+            then mergeResult acc 
+            else loop acc stream
+        | c when (isDigit|?|isLetter|?|isAnyOf['"';'\'';']']) c -> 
+            stream.SkipRestOfLine true 
+            loop acc stream
+        | c->   
+            if stream.IsEndOfStream 
+            then mergeResult acc else
+            let lastError = (expected <| sprintf "could not parse unexpected character -'%c'\
+                                                  at Ln: %d Col: %d" c stream.Line stream.Column)
+            Reply (Error, foldErrors lastError acc)
+    loop [] stream
+
+
 let parseIntoTableArray (parseKey:string list, inlineTables) =
     // parsekey of a tablearray gives us the table that stores this inlinetable
     // and the key for this inlinetable
@@ -245,8 +315,6 @@ let inline private print str x = printfn "%s%A" str x; x
 let toml_table, private pTableImpl = createParserForwardedToRef ()
 let toml_aot, private pArrOfTablesImpl = createParserForwardedToRef ()
 
-let inline listToKey keys = String.concat "." keys
-let inline keyToList (key:string) = key.Split '.' |> Array.toList
 
 
 let makeTable (vals: #seq<string*Value>): (_,_)table =
@@ -254,17 +322,41 @@ let makeTable (vals: #seq<string*Value>): (_,_)table =
     tbl.AddMany vals 
     tbl
 
-let toml_tablekey =  (pTableKey .>> tskipRestOfLine) 
+let toml_tablekey = (pTableKey .>> tskipRestOfLine) 
 
-let toml_item = 
-    ((toml_key .>>.  (skipEqs >>. toml_value)) .>> tskipRestOfLine);
+
+
+
 
 pTableImpl := 
-    (pTableKey .>> tskipRestOfLine) 
-    .>>. (many toml_item)
+    (pTableKey .>> tskipRestOfLine).>>. (many toml_item)
 
 pArrOfTablesImpl :=
     many ((pArrayOfTablesKey .>> tskipRestOfLine) .>>. many toml_item)
+
+(*
+    Rewrite parser to split on 
+
+        [table.names]
+        [[and.arrayof.table.names]]
+
+        #   pull the heading of the table/array into the
+        #   the components on the inside for fully qualified names
+
+        e.g
+            title                   = TOML Example
+            owner.name              = Tom Preston-Werner
+            owner.organization      = GitHub
+            owner.bio               = GitHub Cofounder & CEO\nLikes tater tots and beer.
+            owner.dob               = 05/27/1979 03:32:00
+            database.server         = 192.168.1.1
+            database.ports          = [| 8001, 8001, 8002, |]
+            database.connection_max = 5000
+            database.enabled        = True
+
+    Build up a hashset during the parse to prevent any duplicate keys
+*)
+
 
 
 let toml_parser (stream: CharStream<_>) =
@@ -295,8 +387,8 @@ let toml_parser (stream: CharStream<_>) =
                             toml.[key] <- Value.Array(ls@arr); addItems keybase tl
                         | _ ->  addItems keybase tl
                     else
-                        toml.Add(key,Value.Array arr); addItems key tl
-                | v ->  toml.Add(key,v); addItems keybase tl
+                        toml.Add (key,Value.Array arr); addItems key tl
+                | v ->  toml.Add (key,v); addItems keybase tl
 
         match stream.Peek () with
         | '#'  -> stream.SkipRestOfLine true; loop acc stream
