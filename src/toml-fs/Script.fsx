@@ -1,8 +1,9 @@
 ﻿#r @"../../packages/FParsec/lib/net40-client/FParsecCS.dll"
 #r @"../../packages/FParsec/lib/net40-client/FParsec.dll"
-#r @"bin/release/toml-fs.dll"
-//#load "AST.fs"
-//#load "Parsers.fs"
+//#r @"bin/release/toml-fs.dll"
+#load "Prelude.fs"
+      "AST.fs"
+      "Parsers.fs"
 
 open System 
 open FParsec
@@ -251,8 +252,8 @@ module complex_tests =
         prun toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""" 
         prun toml_array  "[ 22.04 , 234.00, 23_4.304]" 
         prun toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]" 
-        prun toml_table table0 
-        prun toml_table table1 
+        //prun toml_table table0 
+        //prun toml_table table1 
         ;;
 
 
@@ -264,10 +265,8 @@ module complex_tests =
     toml2
     toml3
     toml4   ]
-    |> List.iter(fun str -> 
-        run (toml_start .>>. section_parser) str 
-        |> printfn "%A"
-    )
+    |> List.iter (prun parse_to_print)
+
 
 
 

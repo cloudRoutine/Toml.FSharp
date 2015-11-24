@@ -49,8 +49,9 @@ and [<StructuredFormatDisplay "{Display}">]
                 printfn "failed trying to add %s, %s" k (string v)
                 printfn "TOML Parsed -\n%s" (string toml)
 
-        member toml.TryAdd = toml.Table.TryAdd
+        member toml.TryAdd      = toml.Table.TryAdd
         member toml.ContainsKey = toml.Table.ContainsKey
+        member toml.AddMany     = toml.Table.AddMany
 
 and [<RequireQualifiedAccess>] 
     Key = 
