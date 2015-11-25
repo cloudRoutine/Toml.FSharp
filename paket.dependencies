@@ -4,8 +4,8 @@ nuget FParsec
 nuget FsCheck
 nuget FsCheck.XUnit
 nuget FSharp.Formatting
-nuget NUnit 
-nuget NUnit.Runners
+nuget NUnit ~> 2
+nuget NUnit.Runners ~> 2
 nuget FAKE
 nuget SourceLink.Fake
 nuget XUnit
