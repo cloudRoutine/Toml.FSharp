@@ -7,6 +7,7 @@
 
 open System 
 open FParsec
+open TomlFs.Prelude
 open TomlFs.AST
 open TomlFs.Parsers
 
@@ -304,12 +305,12 @@ module complex_tests =
 
 [
     toml0
-    toml1
-    toml2
-    toml3
-    toml4
-    toml5   
-    toml6    
+//    toml1
+//    toml2
+//    toml3
+//    toml4
+//    toml5   
+//    toml6    
 ]
     //|> List.iter (prun parse_to_print)
     |> List.iter (prun tomstructor)
