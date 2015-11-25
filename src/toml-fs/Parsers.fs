@@ -430,22 +430,8 @@ let construct_toml (toplevel:(string*Value)list,
             printfn "\nIn add section adding | KEY %s =  %s |" ( keyName k) (string v)
             table.Add( keyName k,v ))
 
-
-
-
-
     let foldtoml    (prev:string, nested:string list, acc:Dictionary<string,Value>,toml:Dictionary<string,Value>) 
                     (cur:string, elems:(string*Value)list)       = 
-//
-//        printfn    "CONSTRUCT TOML STATE ::\n\
-//                    prev            %s - \n\
-//                    nested          %s - \n\
-//                    cur             %s - \n\
-//                    elems to add    %A - \n\
-//                    acc             %A - \n\
-//                    toml            %A - \n" 
-//                        prev (string nested) cur elems (Value.Table acc |> string) (Value.Table toml |> string)
-
         try 
             (* add parsed elements to current table *)
             let emptyAccum toml = ("", [""],toml, toml)
@@ -534,16 +520,6 @@ let construct_toml_when (toplevel:(string*Value)list,
 
     let foldtoml    (prev:string, nested:string list, acc:Dictionary<string,Value>,toml:Dictionary<string,Value>) 
                     (cur:string, elems:(string*Value)list)       = 
-//
-//        printfn    "CONSTRUCT TOML STATE ::\n\
-//                    prev            %s - \n\
-//                    nested          %s - \n\
-//                    cur             %s - \n\
-//                    elems to add    %A - \n\
-//                    acc             %A - \n\
-//                    toml            %A - \n" 
-//                        prev (string nested) cur elems (Value.Table acc |> string) (Value.Table toml |> string)
-
         try 
             (* add parsed elements to current table *)
             let emptyAccum toml = ("", [""],toml, toml)
@@ -611,7 +587,82 @@ let construct_toml_when (toplevel:(string*Value)list,
     let _,_,_,toml = Array.fold foldtoml (String.Empty,[""],acc,initToml) tables
     addSection toml toplevel
 
+let construct_toml_when_no_lambda (toplevel:(string*Value)list, 
+                                   tables:(string*(string*Value)list)[]) =
 
+    let addSection (table:Dictionary<string,Value>) (kvps:(string*Value) list) =
+        kvps |> List.iter (fun (k,v)-> 
+            printfn "\nIn add section adding | KEY %s =  %s |" ( keyName k) (string v)
+            table.Add( keyName k,v ))
+
+    let foldtoml    (prev:string, nested:string list, acc:Dictionary<string,Value>,toml:Dictionary<string,Value>) 
+                    (cur:string, elems:(string*Value)list)       = 
+        try 
+            (* add parsed elements to current table *)
+            let emptyAccum toml = ("", [""],toml, toml)
+            let curtbl = makeTable [] in addSection curtbl elems
+            match  prev,cur with 
+
+            // when not at the root we connect prior node and push current forward
+            | prev,cur when isRootOfPrev (prev,cur) && isAoT (prev,cur) = notAoT && isAtTopLevel (prev,cur)  ->
+                let acc = connectToRoot cur curtbl prev acc nested
+                toml.Add (keyName cur, Value.Table acc)
+                emptyAccum toml
+
+            | prev,cur when isRootOfPrev (prev,cur) && isAoT (prev,cur) = notAoT && (not<<isAtTopLevel)(prev,cur)  ->
+                let acc = connectToRoot cur curtbl prev acc nested
+                (cur, getNested cur, acc, toml)
+
+            | prev,cur when isRootOfPrev(prev,cur)&&isAoT (prev,cur) = addToCurrentAoT&&isAtTopLevel(prev,cur)  ->
+                let curAoT = [connectToRoot cur curtbl prev acc nested]
+                toml.Add(keyName cur,Value.ArrayOfTables curAoT)
+                (cur, [""],toml, toml)
+
+            | prev,cur when isRootOfPrev(prev,cur)&&(isAoT (prev,cur) = addToCurrentAoT)&&(not<<isAtTopLevel)(prev,cur)  ->
+                let curAoT = [connectToRoot cur curtbl prev acc nested]
+                let pkey, parent = parentKey cur, makeTable[] in parent.Add(keyName cur,Value.ArrayOfTables curAoT)
+                (pkey, getNested pkey,parent, toml)
+
+            | prev,cur when (not<<isRootOfPrev)(prev,cur)&&(isAoT (prev,cur) = notAoT)&&isAtTopLevel(prev,cur)  ->
+                let toml = addToToplevel prev acc toml nested 
+                toml.Add (keyName cur, Value.Table acc)
+                emptyAccum toml
+
+            | prev,cur when (not<<isRootOfPrev)(prev,cur)&&(isAoT (prev,cur) = notAoT)&&(not<<isAtTopLevel)(prev,cur)  ->
+                let toml = addToToplevel prev acc toml nested
+                (cur, getNested cur,curtbl, toml)
+
+            (* If we're creating a new AoT it's parent needs to be created to store it inside of *)
+            | prev,cur when (not<<isRootOfPrev)(prev,cur)&&(isAoT (prev,cur) = addToCurrentAoT)&&isAtTopLevel(prev,cur)  ->
+                let toml = addToToplevel prev acc toml nested
+                toml.Add(keyName cur,Value.ArrayOfTables [curtbl])
+                (prev, [""], toml , toml)
+
+            (* if we're at the toplevel and the prior insertion wasn't an Array of tables we can igore prev 
+               since we're not an Array of Tables we don't need to carry anything over *)
+            | prev,cur when (isAoT (prev,cur) = addToPrevAoT)&&(not<<isAtTopLevel)(prev,cur)  ->
+                consOnAoT cur curtbl acc; (cur, getNested cur, acc, toml)
+
+            | prev,cur when (isAoT (prev,cur) = addToPrevAoT)&&isAtTopLevel(prev,cur)  ->
+                consOnAoT cur curtbl acc; (cur, getNested cur,acc, toml)
+
+                (* If all else fails, keep on trucking??? *)
+            | _, _ -> 
+                printfn "kept on trucking\n cur is - %s" cur
+                printfn "\n Nested : %A " nested 
+
+                ( cur, nested, acc, toml)
+        with
+        | exn -> 
+            printfn "caught exception - \n%s\n but fuck that noise keep rolling" exn.Message
+            printfn "\n Nested : %A " nested 
+
+            ( cur, nested, acc, toml)
+
+    let tables = tables |> Array.filter (fun (_,ls)-> ls<>[])
+    let initToml, acc = makeTable[], makeTable[]
+    let _,_,_,toml = Array.fold foldtoml (String.Empty,[""],acc,initToml) tables
+    addSection toml toplevel
 
 
 //
