@@ -193,10 +193,10 @@ let raw_content_block =
 let toml_item = (toml_key .>>. (skipEqs >>. toml_value)) .>> skip_tspcs
 
 let internal foldErrors init (ls:Reply<_> list) =
-    (init, ls) ||> List.fold (fun acc elm -> mergeErrors acc elm.Error)
+    (ls, init) ||> List.foldBack (fun elm acc -> mergeErrors acc elm.Error)
 
 let internal mergeResult (rs:Reply<_> list) =
-    let output = ([],rs) ||> List.fold (fun acc elm -> elm.Result::acc)
+    let output = (rs,[]) ||> List.foldBack (fun elm acc  -> elm.Result::acc)
     Reply (Ok,output,NoErrorMessages)
 
 
@@ -233,6 +233,10 @@ let section_splitter (stream: CharStream<_>) =
                                                   at Ln: %d Col: %d" c stream.Line stream.Column)
             Reply (Error, foldErrors lastError acc)
     loop [] stream
+//    |> fun x -> 
+//        printfn "\nSection Splitter\n"
+//        x.Result |> List.iter (fun (k,v) -> printfn "%s -- %s" k v )
+//        x
 
 let toml_section, private pSectionImpl  = createParserForwardedToRef ()
 
@@ -251,29 +255,243 @@ let private section_parser (stream:CharStream<_>) =
             let result = (mergeResult acc).Result
             Reply(Error,result,lastError)
     loop [] stream
-
+//    |> fun x -> 
+//        printfn "\n>> Section Parser\n"
+//        x.Result |> List.iter (fun (k,v) -> printfn "%s -- %s" k (string v) )
+//        x
 
 pSectionImpl := section_parser .>> skip_tspcs
 
 
+let inline makeTable (vals: #seq<string*Value>): (_,_)table =
+    let tbl = table<_,_>() 
+    tbl.AddSeq vals 
+    tbl
+
+//let keyName (key:string) = 
+//    let trimd = 
+//        if String.bookends "[" "]" key then key.Substring(1,key.Length-1)
+//        else key
+//    (trimd.Split '.').Last 
+
 let parse_block (keybracket:string,sectiondata:string) =
-    let isAot = String.bookends "[[" "]]" keybracket
-    let tkey  = if isAot then keybracket.[2..keybracket.Length-3] else 
+    let isAoT = String.bookends "[[" "]]" keybracket
+    let tkey  = if isAoT then keybracket.[2..keybracket.Length-3] else 
                 keybracket.[1..keybracket.Length-2]
     let psr_result = 
         sectiondata |> run (toml_section
-            |>> fun xs -> xs |> List.map (fun (k,v) -> 
-                String.concat""[tkey;".";k],v )) 
+            |>> List.map (fun (k,v) -> 
+                    String.concat""[tkey;".";k],v )) 
     match psr_result with
     | Failure (errorMsg,_,_) -> failwith errorMsg
-    | Success (result,_,_)   -> keybracket, result
+    | Success (result,_,_)   -> 
+//        printfn "\n[- Parse Block -]\n"
+//        result |> List.iter (fun (k,v) -> printfn "%s -- %s" k (string v) )
+        keybracket, result
+
     
-let inline makeTable (vals: #seq<string*Value>): (_,_)table =
-    let tbl = table<_,_>() 
-    tbl.AddMany vals 
-    tbl
 
 
+
+let inline keyName (key:string) = (key.Split '.').Last 
+
+
+let inline parentKey (key:string)  = 
+    printfn "initial parentkey - %s" key
+    let tkey =
+        if   String.bookends "[[" "]]" key then key.[2..key.Length-3]
+        elif String.bookends "["   "]" key then key.[1..key.Length-2]
+        else key
+    let idx1 = tkey.LastIndexOf '.' 
+    let pkey =
+        if idx1 = -1 then String.Empty else
+        let sub = tkey.Substring(0,idx1) in let idx2 = sub.LastIndexOf '.' 
+        if idx2 = -1 then sub else sub.Substring(idx2+1, sub.Length-idx2-1)
+    printfn "cleaned parentkey - %s" pkey
+    pkey
+
+
+let getNested = parentKey >> keyToList
+
+
+let inline (|DisjointSections|IsRootOfPrev|AtTopLevel|) (prev, cur) =  
+    let inline getRoot (key:string)  = 
+        match key.IndexOf '.' with
+        | -1 -> key | idx -> key.Substring(0,idx)
+    if  getRoot prev = getRoot cur then IsRootOfPrev
+    elif  parentKey prev = "" && parentKey cur = "" then AtTopLevel else
+    DisjointSections
+
+
+let inline (|AddToLastAoT|AddToCurrentAoT|NotAoT|) (prev, cur) =
+    let isAoT header = String.bookends "[[" "]]" header
+    if isAoT prev && isAoT cur && keyName cur = keyName prev then AddToLastAoT 
+    elif isAoT cur then AddToCurrentAoT
+    else NotAoT
+
+let consOnAoT name curTbl (prevTable:(string,Value)table) = 
+    let name = keyName name
+    match prevTable.[name] with
+    | Value.ArrayOfTables tbls ->  
+        printfn "\ncons onto from of AoT - Add table into %s with data ::\n %s" (keyName name) (Value.Table curTbl|> string)
+
+        prevTable.[name] <- Value.ArrayOfTables (curTbl::tbls)
+    | v -> printfn "tried to add a table to %A, expected an array of tables\
+                    should be a failure, but let's chill on that" v
+    
+
+// when we see that the previous section shares no roots with the current section
+// it's time to connected the previous section up to the toplevel before we continue 
+// constructing the datastructure
+let addToToplevel prevName prevTable (toml:(string,Value)table) (nested:string list) =
+    let rec loop nsd (name:string,tbl:(string,Value)table) =
+        match nsd with
+        | [] -> 
+            printfn "\nadd to toplevel %s = %s" (keyName name) (Value.Table tbl|> string)
+            toml.Add(keyName name,Value.Table tbl); toml
+
+        | hd::_ -> 
+            let newtbl = makeTable[] in newtbl.Add(keyName name,Value.Table tbl)
+            loop [] (hd,newtbl)
+    loop nested  (prevName,prevTable)
+
+
+// current name has been split to remove qualification
+let connectToRoot (curName:string)   (curRoot:(string,Value)table) 
+             (prevName:string) (prevTable:(string,Value)table) (prevNest:string list) =
+
+    let rec checkNested (ls:string list) acc =
+        match ls with
+        | hd::tl -> 
+            if hd.Contains "." then let fls = keyToList hd |> List.rev in checkNested tl (fls@acc)
+            else checkNested tl (hd::acc)
+        | [] -> acc
+
+    let rec loop nsd prevName (acc:(string,Value)table) =
+        match nsd with
+        | hd::_ when hd = curName -> 
+            printfn "\nIn connecting to root - %s = %s" (keyName prevName) (Value.Table acc|> string)
+
+            curRoot.Add(keyName prevName,Value.Table acc); curRoot
+        | _::tl ->  
+            let newTable = makeTable[] in newTable.Add(keyName prevName,Value.Table acc)
+            printfn "\nIn Connecting to root %s = %s" (keyName prevName) (Value.Table acc|> string)
+            loop tl prevName newTable
+        | _ -> failwithf "improper nesting list provided %A\n List should have contained - %s" prevNest curName
+    loop (checkNested prevNest []  ) prevName prevTable
+
+
+
+
+(* Need a function to handle recursive ascent construction *)
+
+
+
+
+
+
+let construct_toml (toplevel:(string*Value)list, 
+                    tables:(string*(string*Value)list)[]) =
+
+    let addSection (table:Dictionary<string,Value>) (kvps:(string*Value) list) =
+        kvps |> List.iter (fun (k,v)-> table.Add( keyName k,v ))
+
+    let foldtoml    (prev:string, nested:string list, acc:Dictionary<string,Value>,toml:Dictionary<string,Value>) 
+                    (cur:string, elems:(string*Value)list)       = 
+
+        printfn    "CONSTRUCT TOML STATE ::\n\
+                    prev    %s - \n\
+                    nested  %s - \n\
+                    cur     %s - \n\
+                    elems   %A - \n\
+                    acc     %A - \n\
+                    toml    %A - \n" prev (string nested) cur elems (Value.Table acc |> string) (Value.Table toml |> string)
+
+
+        (* add parsed elements to current table *)
+        let curtbl = makeTable elems in addSection curtbl elems
+        match  prev,cur with 
+        | IsRootOfPrev & NotAoT ->
+            let acc = connectToRoot cur curtbl prev acc nested
+            printfn "\nIsRootOfPrev and NotAoT - connecting %s into -\n %s" 
+                (keyName prev) (Value.Table curtbl|> string)
+            (cur, getNested cur,acc,toml )
+
+        | IsRootOfPrev & AddToCurrentAoT ->
+            let curAoT = [connectToRoot cur curtbl prev acc nested]
+            let parent = makeTable[] in parent.Add(keyName cur,Value.ArrayOfTables curAoT)
+            printfn "\nIsRootOf Prev and AddToCurrentAoT - adding %s into AoT::\n %s" (keyName cur) (Value.ArrayOfTables curAoT|> string)
+            let pkey = parentKey cur
+            (pkey, getNested pkey,parent, toml)
+        
+        | DisjointSections & NotAoT ->
+            let toml = addToToplevel prev acc toml nested
+            printfn "\nDisjoint Sections and NotAoT- adding %s into ::\n %s" 
+                (keyName prev) (Value.Table toml|> string)
+            (cur, getNested cur, curtbl, toml)
+            
+        (* If we're creating a new AoT it's parent needs to be created to store it inside of *)
+        | DisjointSections & AddToCurrentAoT  ->
+            let toml = addToToplevel prev acc toml nested
+            let parent = makeTable[] in parent.Add(keyName cur,Value.ArrayOfTables [curtbl])
+            printfn "\nDisjoint Sections  and AddToCurrentAoT - adding %s into AoT::\n %s" 
+                (keyName cur) (Value.Table parent|> string)
+            let pkey = parentKey cur
+            (pkey, getNested pkey,parent , toml)
+        
+        | AtTopLevel & NotAoT ->
+            toml.Add(keyName prev, Value.Table acc)
+            printfn "\nAtToplevel and NotAoT - adding %s into ::\n %s" 
+                (keyName prev) (Value.Table acc|> string)
+            (cur, getNested cur, curtbl, toml)
+
+        | AtTopLevel &  AddToLastAoT ->    
+            consOnAoT cur curtbl acc
+            printfn "\nAtToplevel and AddToLastAoT- adding %s into ::\n %s" 
+                (keyName prev) (Value.Table acc|> string)
+            (cur, getNested cur,acc, toml)
+
+        | AtTopLevel & AddToCurrentAoT ->
+            let curAoT = [connectToRoot cur curtbl prev acc nested]
+            printfn "\nAtTopLevel and AddToCurrentAoT - adding %s into AoT::\n %s" 
+                (keyName cur) (Value.ArrayOfTables curAoT|> string)
+
+            toml.Add(keyName cur,Value.ArrayOfTables curAoT )
+            (cur, getNested cur,toml, toml)
+
+        | AddToLastAoT ->    
+            consOnAoT cur curtbl acc
+            printfn "\nIsRootOf Prev and AddToCurrentAoT - adding %s into AoT::\n %s" 
+                        (keyName cur) (Value.Table curtbl|> string)
+            (cur, getNested cur,acc, toml)
+        (* If all else fails, keep on trucking??? *)
+        | _, _ -> 
+            printfn "kept on trucking\n cur is - %s" cur
+            ( cur, nested, acc, toml)
+
+    let tables = tables |> Array.filter (fun (_,ls)-> ls<>[])
+    let initToml, acc = makeTable[], makeTable[]
+    let _,_,_,toml = Array.fold foldtoml ("Start-Folding",[],acc,initToml) tables
+    addSection toml toplevel
+
+//
+//    let toml = TOML()
+//    List.iter toml.Add toplevel
+//    tables |> Array.iter (fun (tkey,kvps)  -> 
+//        let isAoT = String.bookends "[[" "]]" tkey
+//        let name  = if isAoT then tkey.[2..tkey.Length-3] else 
+//                    tkey.[1..tkey.Length-2]
+//
+//        let trimd = kvps |> Seq.map (fun (k,v) -> keyName k,v )
+//        let tbl = table<_,_>() in tbl.AddSeq(trimd)
+//        if isAoT then
+//            toml.Add (name,Value.Table tbl,true)
+//        else
+//            toml.Add(name,Value.Table tbl)
+//        )
+    printfn "Toml as Value.Table\n\n%s" (string (Value.Table toml) )
+    printfn "Toml as Dictionary \n\n%A" toml
+    toml
 
 let internal sprint_parse_array (toplevel,tables) =
     let sb = StringBuilder()
@@ -289,17 +507,24 @@ let internal sprint_parse_array (toplevel,tables) =
             sprintf "%-*s = %-*s" maxklen key maxvlen (string value)
             |> sb.AppendLine |> ignore )
 
-    sb.AppendLine().AppendLine("-- toplevel --").AppendLine()|>ignore
-
-    format_section toplevel
-
     tables 
+    |> Array.filter (fun (_,ls)-> ls<>[])
+    |> Array.map( fun x -> printfn "%A" x; x )
     |> Array.iter (fun (name,kvpls) -> 
         sb.AppendLine().AppendLine(name).AppendLine()|>ignore
         match kvpls with [] -> () | _  -> format_section kvpls)
 
+    sb.AppendLine().AppendLine("-- toplevel --").AppendLine()|>ignore
+
+    format_section toplevel
+
+
     string sb
 
+let tomstructor =
+    toml_section .>>. (section_splitter |>> fun ls ->
+        Array.ofList ls |> Array.Parallel.map parse_block)
+    |>> construct_toml
 
 // NOTE - not handling arrays of tables properly
 let parse_to_print = 

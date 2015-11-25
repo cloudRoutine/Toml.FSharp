@@ -13,11 +13,18 @@ let inline (|?|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x || pred2 x
 
 [<RequireQualifiedAccess>] 
 module  List =
-    let inline last ls =
+    let inline last ls = 
         let rec loop ls =
             match ls with
             | x::[] -> x | _::tl -> loop tl | [] -> failwith "empty list has no last member"
         loop ls
+
+[<RequireQualifiedAccess>] 
+module  Array =
+    let inline last (array:'a[]) = array.[array.Length-1]
+
+type 'a ``[]`` with
+    member array.Last = array.[array.Length-1]
 
 [<RequireQualifiedAccess>] 
 module String =
