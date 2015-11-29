@@ -7,6 +7,7 @@
 
 open System 
 open FParsec
+open TomlFs.Prelude
 open TomlFs.AST
 open TomlFs.Parsers
 
@@ -205,6 +206,49 @@ module  toml_samples =
 
     """
 
+    let toml5 = """
+
+        [[fruit]]
+      name = "apple"
+
+      [fruit.physical]
+        color = "red"
+        shape = "round"
+
+      [[fruit.variety]]
+        name = "red delicious"
+
+      [[fruit.variety]]
+        name = "granny smith"
+
+    [[fruit]]
+      name = "banana"
+
+      [[fruit.variety]]
+        name = "plantain"
+    """
+
+    let toml6 = """
+    
+       [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+      color = "gray"
+
+      [[products]]
+      name = "Hammer"
+      sku = 738594937
+
+      [[products]]
+      name = "Nail"
+      sku = 284758393
+      color = "gray"
+    """
+
 
 
 let prun psr str = run psr str |> printfn "%A"
@@ -264,8 +308,17 @@ module complex_tests =
     toml1
     toml2
     toml3
-    toml4   ]
-    |> List.iter (prun parse_to_print)
+    toml4
+    toml5   
+    toml6   
+] |> fun x ->
+  //  x |> List.iter (prun parse_to_print)
+    //x |> List.iter (prun tomstructor)
+    x |> List.iter (prun tomstructor
+    //    |> fun y -> y
+    
+    )
+        
 
 
 

@@ -1,4 +1,11 @@
-﻿module TomlFs.AST
+﻿//#if INTERACTIVE
+//#load "Prelude.fs"
+//open TomlFs.Prelude
+//#else
+//module TomlFs.AST
+//#endif
+module TomlFs.AST
+
 #nowarn "62"
 open System
 open System.Text
@@ -8,8 +15,8 @@ type ('key,'value) Dictionary with
     member self.TryAdd (key,value) =
         if self.ContainsKey key then false else self.Add (key,value); true
 
-    member self.AddMany xs = Seq.iter self.Add xs
-        
+    member self.AddSeq xs = Seq.iter self.Add xs
+
     member self.AddOnlyNewKeys ls = ls |> List.iter (self.TryAdd>>ignore)
 
 
@@ -18,89 +25,131 @@ let inline private seqstr xs (modstr:string) =
     xs |> Seq.iter (fun x -> sb.Append(string x).Append(",").Append(modstr)|>ignore)
     string sb  
 
-type ('k,'v) table = ('k,'v) Dictionary
 
-and [<StructuredFormatDisplay "{Display}">]
-    TOML = 
-    TOML of (string,Value) table
-
-        override toml.ToString() =
-            let (TOML tbl) = toml
-            let sb = StringBuilder () in tbl |> Seq.iter (fun kvp -> 
-                match kvp.Key,kvp.Value with
-                | key, (Value.Table tbl) when tbl.Count = 0 ->
-                    sb.AppendLine(sprintf "{[ %s ]}" key)|> ignore
-                | _ -> 
-                    let str = sprintf "%s = %s" kvp.Key (string kvp.Value)
-                    sb.AppendLine str |> ignore) 
-            sb.Insert (0,'\n') |> string
-
-        member private toml.Display = toml.ToString()
-        member private toml.Table   = let (TOML tbl) = toml in tbl
-
-        member toml.Item 
-            with get str   = toml.Table.[str]
-            and  set str v = toml.Table.[str] <- v
-
-        member toml.Add (k,v)   = 
-            try
-                toml.Table.Add (k,v)
-            with _ ->  
-                printfn "failed trying to add %s, %s" k (string v)
-                printfn "TOML Parsed -\n%s" (string toml)
-
-        member toml.TryAdd      = toml.Table.TryAdd
-        member toml.ContainsKey = toml.Table.ContainsKey
-        member toml.AddMany     = toml.Table.AddMany
-
-and [<RequireQualifiedAccess>] 
+type [<RequireQualifiedAccess>] 
     Key = 
     | Bare of string | Quoted of string
     override key.ToString () = key |> function Bare k -> k | Quoted k -> k 
 
 and [<RequireQualifiedAccess>] 
-    [<StructuredFormatDisplay "{Display}">]
+    //[<StructuredFormatDisplay "{Display}">]
     Value =
     | String        of string
     | Int           of int64
     | Float         of float
     | Bool          of bool
-    | DateTime      of DateTime
-    | InlineTable   of (string, Value) table    // "unwrap" keys for table storage
-    | Table         of (string, Value) table     // should this be a value?
+    | DateTime      of DateTime 
     | Array         of Value list
-    | ArrayOfTables of ((string, Value) table) list
-
+    | ArrayOfTables of Table list
+    | InlineTable   of Table
     override value.ToString () =
-        let rec loop (indent:int) (toml:Value) =
-            match toml with
-            | String v       -> v
-            | Int v          -> string v
-            | Float v        -> string v
-            | Bool v         -> string v
-            | DateTime v     -> string v
-            | InlineTable vs -> 
-                ((StringBuilder(),vs) ||> Seq.fold (fun sb elm -> 
-                    sb.Append(elm.Key).Append(" = ").Append(string elm.Value).Append(", ")) |> string)
-                |> sprintf "{ %s}" 
-            | Array vs -> 
-                sprintf "[| %s|]" ((StringBuilder(),vs) ||> Seq.fold (fun sb elm -> 
-                    sb.Append(string elm).Append(", ")) |> string)
-            | Table vs -> 
-                match vs.Count with
-                | 0 -> ""
-                | 1 -> sprintf "{[ %s ]}" (Seq.head vs|> string) 
-                | _ ->
-                ((StringBuilder(),vs) ||> Seq.fold (fun sb kvp -> 
-                    sb.AppendLine(sprintf "%*s = %s" (indent+4) kvp.Key (loop (indent+4) kvp.Value)))) 
-                |> string |> fun str -> sprintf "{[\n%s %*s]}" str (indent-4) ""
-            | ArrayOfTables vs ->
-                ((StringBuilder(),vs) ||> Seq.fold (fun sb arr -> 
-                    sb.AppendLine(sprintf "%*s" (indent+4) (loop (indent+4)(Value.InlineTable arr)) ))) 
-                |> string |> fun str -> sprintf "[|\n%*s %*s|]\n" indent str (indent-4) ""
-        loop 4 value
+        match value with
+        | String v          -> v
+        | Int v             -> string v
+        | Float v           -> string v
+        | Bool v            -> string v
+        | DateTime v        -> string v
+        | InlineTable v     -> string v
+        | Array vs          -> 
+            vs |> List.map string |> String.concat "; " |> sprintf "[| %s |]" 
+        | ArrayOfTables vs  -> 
+            vs |> List.map string |> String.concat ";\n"
+            |> String.indent 2|> sprintf "[|\n%s\n|]"
+and Table () = 
+    let tables      = Dictionary<string,Table>()
+    let elems       = Dictionary<string,Value>()
+    let contains    = HashSet<string>()
 
-    member private value.Display = value.ToString()
+    member private __.Elems       = elems
+    member private __.Tables      = tables
+    member private __.ContainSet  = contains
 
+    member self.ContainsKey key = self.ContainSet.Contains key 
 
+    member self.Add (key:string,table:Table) = 
+        if key.IndexOf "." = -1 then
+            if not (self.ContainSet.Add key) then false else
+            self.Tables.Add (key,table)
+            true
+        else
+        let keys = keyToList key
+        let rec loop (keys:string list) (curTable:Table) =
+            match keys with
+            | [hd] -> curTable.Add( hd,Table())
+            | hd::tl -> 
+                if curTable.ContainsKey ( hd) then 
+                    loop tl curTable.[hd]
+                else
+                    let tbl = Table() in 
+                    curTable.Add( hd,tbl) |> ignore
+                    loop tl tbl  
+            | [] -> false
+        loop keys self
+
+    member self.Add (key:string,value:Value) = 
+        if key.IndexOf "." = -1 then
+            if not (self.ContainSet.Add key) then false else
+            self.Elems.Add (key,value)
+            true
+        else
+        let tbl = parentKey key
+        if self.ContainsKey tbl then () else self.Add (tbl,Table())|>ignore
+        let keys = keyToList key
+        let rec loop (keys:string list) (curTable:Table) =
+            match keys with
+            | [hd] -> 
+                if not (curTable.Elems.ContainsKey hd) then 
+                    curTable.Elems.Add(hd,value) 
+                    true
+                else false
+            | hd::tl ->  loop tl curTable.[hd] 
+            | [] -> false
+        loop keys self 
+
+    member __.SubTables() = tables |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
+    member __.Item 
+        with get key    = tables.[key]
+        and  set key v  = tables.[key] <- v
+    
+    member __.Elem
+        with get key    = elems.[key]
+        and  set key v  = elems.[key] <- v
+    
+    member __.Empty 
+        with get () = tables.Count = 0 && elems.Count = 0 
+
+    member self.AddSeq (kvps:seq<string*Value>) = 
+        kvps |> Seq.iter (self.Add>>ignore)
+
+    new (kvps:seq<string*Value>) as self = 
+        Table () then kvps |> Seq.iter self.Elems.Add
+        
+    new (key:string, table:Table) as self = 
+        Table () then self.Tables.Add (key,table)
+
+    override self.ToString () =
+        let sb = StringBuilder ()
+        sb.AppendLine() |> ignore
+        let maxklen, _ = findKVPMaxes (elems :> seq<_>)
+        elems |> Seq.iter (fun topkvp -> 
+            match topkvp.Value with
+            | Value.ArrayOfTables tbls ->
+                sb.AppendLine (sprintf "%-*s = [|" maxklen topkvp.Key )|>ignore
+                tbls |> List.iter (fun elems ->
+                    let eb = StringBuilder()
+                    eb.AppendLine(sprintf "[[%s]] {" topkvp.Key)|>ignore
+                    elems.Elems |> Seq.iter (fun kvp -> 
+                        sprintf "%-*s = %s" maxklen kvp.Key  (string kvp.Value)|> eb.AppendLine|>ignore)
+                    let substr = string eb |> String.indent 2
+                    substr |> sb.Append |> ignore
+                    "};\n" |> sb.Append |> ignore 
+                )
+                sb.AppendLine ("|]")|>ignore
+            | _ ->    sprintf "%-*s = %s" maxklen topkvp.Key (string topkvp.Value) |> sb.AppendLine |> ignore) 
+
+        self.SubTables() |> Seq.iter (fun (name,data) ->
+            let substr = sprintf "[%s]\n%s" name (string data) |> String.indent 2
+            sb.AppendLine(substr)|>ignore
+            |> ignore)
+        sprintf "{%s\n}" ((string sb |> String.indent 2).TrimEnd([|'\n';' '|]))
 

@@ -102,17 +102,18 @@ let toml_string   = pString_toml    |>> Value.String
 
 (*| Key Parsers |*)
 
-// key formats
-
 let isKeyStart = isDigit|?|isLetter|?|isAnyOf['"';'\'']
 
+// key formats
 let pBareKey          : Parser<_> = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
 let pQuoteKey         : Parser<_> = between ``"`` ``"`` (many1Chars anyChar) 
+
 // key in a collection
 let toml_key          : Parser<_> = 
     (choiceL [pBareKey; pQuoteKey ] 
         "a quoted key starting with \"\
          or a bare key starting with a letter or digit\n") .>> skip_tspcs
+
 // toplevel keys
 let pTableKey         : Parser<_> = between ``[``   ``]`` (sepBy toml_key ``.``)
 let pArrayOfTablesKey : Parser<_> = between ``[[`` ``]]`` (sepBy toml_key ``.``)
@@ -135,11 +136,7 @@ let pArray_toml : Parser<_> =
     between ``[`` ``]`` (sepBy toml_value ``,``) 
 
 let pInlineTable : Parser<_> =
-    between ``{`` ``}`` (sepBy pKVP ``,``)
-    |>> fun items ->
-        let tbl:(_,_) table = table<_,_> ()
-        List.iter tbl.Add items
-        tbl
+    between ``{`` ``}`` (sepBy pKVP ``,``) |>> Table
 
 pArrayImpl := pArray_toml  |>> Value.Array       .>> skip_tspcs
 pITblImpl  := pInlineTable |>> Value.InlineTable .>> skip_tspcs
@@ -170,9 +167,6 @@ pValueImpl := value_parser .>> skip_tspcs
         
 (*| Toplevel Parsers |*)
 
-let inline listToKey keys = String.concat "." keys
-let inline keyToList (key:string) = key.Split '.' |> Array.toList
-
 // Brace matching parsers that store the chars unlike preceding versions
 let ``[+``  = pstring "["  .>> skip_tspcs 
 let ``]+``  = pstring "]"  .>> skip_tspcs
@@ -183,28 +177,26 @@ let ptkey : Parser<_> =
     ``[+``.>>. (sepBy toml_key ``.``) .>>. ``]+``
     |>> fun ((b,ls),e) -> String.concat "" [b; listToKey ls; e]
 
-let pakey : Parser<_> = 
+let paotKey : Parser<_> = 
     ``[[+``.>>. (sepBy toml_key ``.``) .>>. ``]]+``
     |>> fun ((b,ls),e) -> String.concat "" [b; listToKey ls; e]
 
 let raw_content_block =
-    manyCharsTill anyChar (followedByL (pakey<|>ptkey) "expected a table or array table key"<|>eof)
+    manyCharsTill anyChar (followedByL (paotKey<|>ptkey) "expected a table or array table key"<|>eof)
 
 let toml_item = (toml_key .>>. (skipEqs >>. toml_value)) .>> skip_tspcs
 
 let internal foldErrors init (ls:Reply<_> list) =
-    (init, ls) ||> List.fold (fun acc elm -> mergeErrors acc elm.Error)
+    (ls, init) ||> List.foldBack (fun elm acc -> mergeErrors acc elm.Error)
 
 let internal mergeResult (rs:Reply<_> list) =
-    let output = ([],rs) ||> List.fold (fun acc elm -> elm.Result::acc)
+    let output = (rs,[]) ||> List.foldBack (fun elm acc  -> elm.Result::acc)
     Reply (Ok,output,NoErrorMessages)
 
 
 // split the TOML file up into sections by their table keys
 let section_splitter (stream: CharStream<_>) =
-    
     let rec loop acc stream =
-
         let inline checkReply (psr:Parser<_>) acc =
             let (reply: _ Reply) =  psr stream
             if reply.Status <> Ok then Reply (Error, reply.Error) 
@@ -213,7 +205,7 @@ let section_splitter (stream: CharStream<_>) =
         match stream.Peek () with
         | '['  ->   
             if stream.Peek2 () = TwoChars ('[','[') 
-            then checkReply (pakey.>>.raw_content_block) acc 
+            then checkReply (paotKey.>>.raw_content_block) acc 
             else checkReply (ptkey.>>.raw_content_block) acc  
         | '#' -> 
             stream.SkipRestOfLine true 
@@ -252,56 +244,156 @@ let private section_parser (stream:CharStream<_>) =
             Reply(Error,result,lastError)
     loop [] stream
 
-
 pSectionImpl := section_parser .>> skip_tspcs
 
 
-let parse_block (keybracket:string,sectiondata:string) =
-    let isAot = String.bookends "[[" "]]" keybracket
-    let tkey  = if isAot then keybracket.[2..keybracket.Length-3] else 
+let inline isAoT header = String.bookends "[[" "]]" header
+
+let parse_block (keybracket:string, sectiondata:string) =
+    let tkey  = if isAoT keybracket then keybracket.[2..keybracket.Length-3] else 
                 keybracket.[1..keybracket.Length-2]
     let psr_result = 
         sectiondata |> run (toml_section
-            |>> fun xs -> xs |> List.map (fun (k,v) -> 
-                String.concat""[tkey;".";k],v )) 
+            |>> List.map (fun (k,v) ->  String.concat""[tkey;".";k],v )) 
     match psr_result with
     | Failure (errorMsg,_,_) -> failwith errorMsg
-    | Success (result,_,_)   -> keybracket, result
-    
-let inline makeTable (vals: #seq<string*Value>): (_,_)table =
-    let tbl = table<_,_>() 
-    tbl.AddMany vals 
-    tbl
+    | Success (result,_,_)   -> 
+        keybracket, result
 
+
+
+let inline extract (tables:(string*(string*Value)list)[]) =
+    if tables = [||] then [||],[||] else    
+    let key = (Array.head>>fst) tables
+    let root = getRoot key
+    let filter = 
+        // prevents combining two different arrays of tables
+        if isAoT key then 
+            fst>>(isAoT|?|(getRoot>>((=)root)))
+        else 
+            // only extract groups of tables with the same root to make construction easier
+            // filter empty tables (empty array of tables can't be filtered)
+            fst>>((not<<isAoT)|&|(getRoot>>(=)root))
+    let took =       
+        match Array.takeWhile filter tables  with 
+        | xs when isAoT key -> xs
+        | [|_,[]|] -> [||]
+        | xs -> xs
+    let skipped = Array.skipWhile filter tables
+    took, skipped
+
+
+
+
+let rec construct_aot (tableName:string) (parseData:(string*(string*Value) list)[]) =
+    let tableName = getRoot tableName
+    let parseData = Array.rev parseData
+
+    let makeTable (elems:(string*Value) list) =
+        (Table(),elems) ||> List.fold (fun tbl (k,v) -> tbl.Add(keyName k,v)|>ignore; tbl)
+
+    let foldAoT (prev:string,aotAcc:Table list) (cur:string,elems:(string*Value) list)  =
+
+        let key = keyName cur
+        match prev, cur with
+        | _, cur when cleanEnds cur = tableName ->
+            (cur,(makeTable elems)::aotAcc)
+        | prev, cur when parentKey cur = tableName  && isAoT cur -> 
+            // case where an AoT needs to be created from scratch because this is nested in the first table in the AoT
+            match aotAcc with
+            | [] -> 
+                let tbl = Table()
+                tbl.Add(key,Value.ArrayOfTables[(makeTable elems)])|>ignore
+                (cur,[tbl])
+            | hd::_ ->
+                if hd.ContainsKey key then
+                    match hd.Elem key with
+                    | Value.ArrayOfTables ls -> 
+                        aotAcc.Head.Elem(key) <- Value.ArrayOfTables((makeTable elems)::ls)
+                    | _ -> ()
+                else
+                    hd.Add(key,Value.ArrayOfTables[(makeTable elems)])|>ignore
+                (prev,(makeTable elems)::aotAcc)
+        | prev,cur when prev = cur && cleanEnds cur = tableName -> 
+            (cur,(makeTable elems)::aotAcc)
+        | prev,cur when parentKey cur = tableName && (not<<isAoT) cur ->  
+            aotAcc.Head.Add (key,(makeTable elems))|> ignore
+            (prev, aotAcc)
+
+        | prev,cur ->   failwithf "reached unhandled Array of Table Case with - \n%s\nprev - %s\ncurrent - %s\n%A" tableName prev cur elems
+    (("",[]),parseData) ||> Array.fold foldAoT 
+    |> fun (_,v) -> 
+        Value.ArrayOfTables v
+
+
+
+let construct_toml (toplevel:(string*Value) list, 
+                    blocks:(string*(string*Value) list)[]) =
+    let construct_table (toml:Table) (name:string,elems:(string*Value) list) =
+        if toml.ContainsKey  name then toml else
+        elems |> List.iter(fun (k,v)-> toml.Add(k,v)|>ignore )
+        toml
+
+    let rec addExtractedBlocks (tables:(string*(string*Value) list)[]) (toml:Table) =
+        let addelems elems =
+            let name = (Array.head>>fst) elems
+            if isAoT name then 
+                let aot = construct_aot name elems
+                toml.Add (getRoot name,aot) |> ignore
+                toml
+            else          
+                let toml = Array.fold construct_table  toml elems
+                toml
+        match extract tables with
+        | [||], [||]  -> toml
+        | [||], rest  -> addExtractedBlocks rest toml
+        | elems, [||] -> addelems elems
+        | elems, rest -> addExtractedBlocks rest (addelems elems)
+    
+    let rec addTopElems (ls:(string*Value)list) (toml:Table) = 
+        match ls with 
+        | [] -> toml
+        |[k,_] when isNull k -> toml
+        | (k,v)::tl -> 
+            toml.Add(k,v)|>ignore
+            addTopElems tl toml
+
+    Table() |> addTopElems toplevel |> addExtractedBlocks blocks 
 
 
 let internal sprint_parse_array (toplevel,tables) =
     let sb = StringBuilder()
-
-    let findmaxes (kvpls:(string*Value)list) =
+    
+    let findMaxes (kvpls:(string*Value) list) =
+        if kvpls = [] then 0,0 else
         ((0,0),kvpls) 
         ||> Seq.fold (fun (kmax,vmax) (key,value) ->
             max kmax key.Length, max vmax (string value).Length)
 
     let format_section ls =
-        let maxklen, maxvlen = findmaxes ls
-        ls |> List.iter(fun (key,value) ->
-            sprintf "%-*s = %-*s" maxklen key maxvlen (string value)
-            |> sb.AppendLine |> ignore )
-
-    sb.AppendLine().AppendLine("-- toplevel --").AppendLine()|>ignore
-
-    format_section toplevel
-
+        match findMaxes ls with
+        | 0,0 -> ()
+        | maxklen, maxvlen -> 
+            ls |> List.iter(fun (key,value) ->
+                sprintf "%-*s = %-*s" maxklen key maxvlen (string value)
+                |> sb.AppendLine |> ignore )
     tables 
+    |> Array.map (fun x -> printfn "%A" x; x)
     |> Array.iter (fun (name,kvpls) -> 
         sb.AppendLine().AppendLine(name).AppendLine()|>ignore
         match kvpls with [] -> () | _  -> format_section kvpls)
 
+    sb.AppendLine().AppendLine("-- toplevel --").AppendLine()|>ignore
+    format_section toplevel
     string sb
 
 
-// NOTE - not handling arrays of tables properly
+let tomstructor =
+    toml_section .>>. (section_splitter |>> fun ls ->
+        Array.ofList ls |> Array.Parallel.map parse_block)
+    |>> construct_toml
+
+
 let parse_to_print = 
     toml_section .>>. (section_splitter |>> fun ls ->
         Array.ofList ls |> Array.Parallel.map parse_block)
