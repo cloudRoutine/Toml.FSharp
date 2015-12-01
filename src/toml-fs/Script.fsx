@@ -302,24 +302,28 @@ module complex_tests =
 
 
 
+let d = DateTime()
 
-[
-    toml0
-    toml1
-    toml2
-    toml3
-    toml4
-    toml5   
-    toml6   
-] |> fun x ->
-  //  x |> List.iter (prun parse_to_print)
-    //x |> List.iter (prun tomstructor)
-    x |> List.iter (prun tomstructor
-    //    |> fun y -> y
-    
-    )
-        
+string d;;
+d.ToString();;
+//[
+//    toml0
+//    toml1
+//    toml2
+//    toml3
+//    toml4
+//    toml5   
+//    toml6   
+//] |> fun x ->
+//  //  x |> List.iter (prun parse_to_print)
+//    //x |> List.iter (prun tomstructor)
+//    x |> List.iter (prun tomstructor
+//    //    |> fun y -> y
+//    
+//    )
+//        
 
-
-
+let t = Table();;
+t.Add ("the.nested.nature.of.tables.is.quite.intriguing.to.me.I.wonder.how.far.it.goes",Value.Int 22L);;
+printfn "%A" t;;
 

@@ -99,7 +99,7 @@ and Table () =
             match keys with
             | [hd] -> 
                 if not (curTable.Elems.ContainsKey hd) then 
-                    curTable.Elems.Add(hd,value) 
+                    curTable.Elems.Add (hd,value) 
                     true
                 else false
             | hd::tl ->  loop tl curTable.[hd] 
@@ -115,13 +115,13 @@ and Table () =
         with get key    = elems.[key]
         and  set key v  = elems.[key] <- v
     
-    member __.Empty 
+    member __.IsEmpty 
         with get () = tables.Count = 0 && elems.Count = 0 
 
-    member self.AddSeq (kvps:seq<string*Value>) = 
+    member self.AddSeq (kvps:(string*Value)seq) = 
         kvps |> Seq.iter (self.Add>>ignore)
 
-    new (kvps:seq<string*Value>) as self = 
+    new (kvps:(string*Value)seq) as self = 
         Table () then kvps |> Seq.iter self.Elems.Add
         
     new (key:string, table:Table) as self = 
@@ -139,7 +139,7 @@ and Table () =
                     let eb = StringBuilder()
                     eb.AppendLine(sprintf "[[%s]] {" topkvp.Key)|>ignore
                     elems.Elems |> Seq.iter (fun kvp -> 
-                        sprintf "%-*s = %s" maxklen kvp.Key  (string kvp.Value)|> eb.AppendLine|>ignore)
+                        sprintf "%-*s = %s" maxklen kvp.Key (string kvp.Value)|> eb.AppendLine|>ignore)
                     let substr = string eb |> String.indent 2
                     substr |> sb.Append |> ignore
                     "};\n" |> sb.Append |> ignore 
@@ -149,7 +149,7 @@ and Table () =
 
         self.SubTables() |> Seq.iter (fun (name,data) ->
             let substr = sprintf "[%s]\n%s" name (string data) |> String.indent 2
-            sb.AppendLine(substr)|>ignore
+            sb.AppendLine substr|>ignore
             |> ignore)
-        sprintf "{%s\n}" ((string sb |> String.indent 2).TrimEnd([|'\n';' '|]))
+        (string sb |> String.indent 2).TrimEnd [|'\n';' '|] |> sprintf "{%s\n}" 
 
