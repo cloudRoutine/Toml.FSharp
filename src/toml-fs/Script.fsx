@@ -250,8 +250,9 @@ module  toml_samples =
     """
 
 
-
 let prun psr str = run psr str |> printfn "%A"
+let parseString parser str = runParserOnString parser () "toml parser test" str;;
+
 
 [<AutoOpen>] 
 module simple_tests =
@@ -293,7 +294,7 @@ module complex_tests =
         prun toml_inlineTable  "{ one = 1, two = 2, three = 3}"
         prun toml_string "\"hello\""
         prun toml_array  "[   \"hello\", \"watup\", \"yo\" ] "
-        prun toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"] ]""" 
+        prun toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"], ]""" 
         prun toml_array  "[ 22.04 , 234.00, 23_4.304]" 
         prun toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]" 
         //prun toml_table table0 
@@ -303,30 +304,21 @@ module complex_tests =
 
 
 
-//[
-//    toml0
-//    toml1
-//    toml2
-//    toml3
-//    toml4
-//    toml5   
-//    toml6   
-//] |> fun x ->
-//  //  x |> List.iter (prun parse_to_print)
-//    //x |> List.iter (prun tomstructor)
-//    x |> List.iter (prun tomstructor
-//    //    |> fun y -> y
-//    
-//    )
-//        
-let parseString parser str =
-//    match runParserOnString parser () "toml parser test" str with
-//    | Success (result,_,_) -> result
-//    | Failure (errmsg,_,_) -> failwith errmsg
-    runParserOnString parser () "toml parser test" str
-;;
+[
+    toml0
+    toml1
+    toml2
+    toml3
+    toml4
+    toml5   
+    toml6   
+] |> fun x ->
+  //  x |> List.iter (prun parse_to_print)
+    x |> List.iter (prun parse_toml_table)
+        
 
-parseString basic_string_char "z";;
-parseString basic_string "\"line1\\nline2\\nline3\\n\"";;
-parseString basic_string "\"?\"";;
+//parseString basic_string "\"\\rline1\\nline2\\nline3\\rline4\"";;
+
+
+//parseString basic_string "\"?\"";;
 
