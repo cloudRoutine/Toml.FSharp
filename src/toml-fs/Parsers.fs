@@ -36,8 +36,8 @@ module Parsers =
     let ``}``   : Parser<_> = pchar   '}'  .>> skip_tspcs    
     let ``[[``  : Parser<_> = pstring "[[" .>> skip_tspcs  
     let ``]]``  : Parser<_> = pstring "]]" .>> skip_tspcs  
-    let ``"``   : Parser<_> = pchar '"'
-    let ``'``   : Parser<_> = pchar '\''
+    let ``"``   : Parser<_> = pchar   '"'
+    let ``'``   : Parser<_> = pchar   '\''
     let ``"""`` : Parser<_> = pstring "\"\"\""
     let ``'''`` : Parser<_> = pstring "\'\'\'"
 
@@ -59,7 +59,7 @@ module Parsers =
     (*|----------------|*)
 
 
-    let (|EscChar|_|)  ch (twoChar:TwoChars) = if TwoChars('\\',ch) = twoChar then Some EscChar else None
+    let (|EscChar|_|) ch (twoChar:TwoChars) = if TwoChars('\\',ch) = twoChar then Some EscChar else None
 
     // unicode control chars
     let isCtrlChar = isAnyOf ([for hex in 0x00..0x1f -> char hex]@['?'])
@@ -212,6 +212,12 @@ module Parsers =
     (* Collection Parsers *)
     (*--------------------*)
 
+    // helper function for accumulating parser results in recursive low level parsers
+    let inline checkReply (psr:Parser<_>) loop acc stream =
+        let (reply: _ Reply) =  psr stream
+        if reply.Status <> Ok then Reply (Error, reply.Error) 
+        else loop (reply.Result::acc) stream
+
 
     // Forward declaration to allow mutually recursive 
     // parsers between arrays and inline tables
@@ -224,8 +230,16 @@ module Parsers =
     let pArray_toml : Parser<_> = 
         let ``[``   : Parser<_> = (attempt (``[`` .>> unicodeNewline .>> skip_tspcs)) <|> ``[`` 
         let ``]``   : Parser<_> = (attempt (skip_tspcs .>> unicodeNewline .>> skip_tspcs >>. ``]``)) <|> ``]`` 
-        let ``,``   : Parser<_> = (attempt (``,`` .>> unicodeNewline .>> skip_tspcs)) <|> ``,`` 
-        between ``[`` ``]`` (sepBy toml_value ``,``) 
+        let rec loop acc (stream:CharStream<_>) =
+            match stream.Peek() with 
+            | ']' -> Reply acc
+            | ' ' | '\t' | ','  ->  stream.Skip()
+                                    loop acc stream
+            | '\n'  ->  stream.SkipUnicodeNewline()|> ignore
+                        loop acc stream
+            | _ -> checkReply  toml_value loop acc stream
+        let psr : Parser<_> = loop []
+        between ``[`` ``]`` psr
 
     let pInlineTable : Parser<_> =
         between ``{`` ``}`` (sepBy pKVP ``,``) |>> Table
@@ -281,27 +295,15 @@ module Parsers =
 
     let toml_item = (toml_key .>>. (skipEqs >>. toml_value)) .>> skip_tspcs
 
-    let internal foldErrors init (ls:Reply<_> list) =
-        (ls, init) ||> List.foldBack (fun elm acc -> mergeErrors acc elm.Error)
-
-    let internal mergeResult (rs:Reply<_> list) =
-        let output = (rs,[]) ||> List.foldBack (fun elm acc  -> elm.Result::acc)
-        Reply (Ok,output,NoErrorMessages)
-
 
     // split the TOML file up into sections by their table keys
-    let section_splitter (stream: CharStream<_>) =
-        let rec loop acc stream =
-            let inline checkReply (psr:Parser<_>) acc =
-                let (reply: _ Reply) =  psr stream
-                if reply.Status <> Ok then Reply (Error, reply.Error) 
-                else loop (reply::acc) stream
-
+    let section_splitter : Parser<_> =
+        let rec loop acc (stream:CharStream<_>) =
             match stream.Peek () with
             | '['  ->   
                 if stream.Peek2 () = TwoChars ('[','[') 
-                then checkReply (paotKey.>>.raw_content_block) acc 
-                else checkReply (ptkey.>>.raw_content_block) acc  
+                then checkReply (paotKey.>>.raw_content_block) loop acc stream
+                else checkReply (ptkey.>>.raw_content_block) loop acc stream 
             | '#' -> 
                 stream.SkipRestOfLine true 
                 loop acc stream
@@ -310,34 +312,32 @@ module Parsers =
                 loop acc stream 
             | '\n' -> 
                 if not (stream.SkipUnicodeNewline ()) 
-                then mergeResult acc 
+                then Reply acc 
                 else loop acc stream
             | c when isKeyStart c -> stream.SkipRestOfLine true; loop acc stream
             | c ->   
                 if stream.IsEndOfStream 
-                then mergeResult acc else
-                let lastError = (expected <| sprintf "could not parse unexpected character -'%c'\
-                                                      at Ln: %d Col: %d" c stream.Line stream.Column)
-                Reply (Error, foldErrors lastError acc)
-        loop [] stream
+                then Reply acc else
+                Reply (Error, expected <| sprintf  "could not parse unexpected character -'%c'\
+                                                    at Ln: %d Col: %d" c stream.Line stream.Column)
+        loop [] 
+
 
     let toml_section, private pSectionImpl  = createParserForwardedToRef ()
 
-    let private section_parser (stream:CharStream<_>) =
+    let private section_parser : Parser<_> =
         let rec loop acc (stream:CharStream<_>) =
             match stream.Peek () with
             | '#' ->  stream.SkipRestOfLine true;  loop acc stream
             | ' ' | '\t' -> stream.SkipUnicodeWhitespace () |> ignore; loop acc stream 
             | '\n' ->       stream.SkipUnicodeNewline () |> ignore; loop acc stream
-            | '['  -> mergeResult acc  
-            | c when isKeyStart c -> loop (toml_item stream::acc) stream
+            | '['  -> Reply acc  
+            | c when isKeyStart c -> checkReply toml_item loop acc stream
             | c -> 
-                if stream.IsEndOfStream then mergeResult acc else
-                let lastError = (expected <| sprintf "could not parse unexpected character -'%c'\
-                                                      at Ln: %d Col: %d" c stream.Line stream.Column)
-                let result = (mergeResult acc).Result
-                Reply(Error,result,lastError)
-        loop [] stream
+                if stream.IsEndOfStream then Reply acc else
+                Reply (Error, expected <| sprintf "could not parse unexpected character -'%c'\
+                                                   at Ln: %d Col: %d" c stream.Line stream.Column)
+        loop [] 
 
     pSectionImpl := section_parser .>> skip_tspcs
 
@@ -347,13 +347,10 @@ module Parsers =
     let parse_block (keybracket:string, sectiondata:string) =
         let tkey  = if isAoT keybracket then keybracket.[2..keybracket.Length-3] else 
                     keybracket.[1..keybracket.Length-2]
-        let psr_result = 
-            sectiondata |> run (toml_section
-                |>> List.map (fun (k,v) ->  String.concat""[tkey;".";k],v )) 
-        match psr_result with
+        match run toml_section sectiondata  with
         | Failure (errorMsg,_,_) -> failwith errorMsg
         | Success (result,_,_)   -> 
-            keybracket, result
+            keybracket, result |> List.map (fun (k,v) -> String.concat""[tkey;".";k],v)
 
 
 
@@ -378,44 +375,43 @@ module Parsers =
         took, skipped
 
 
-
-
     let rec construct_aot (tableName:string) (parseData:(string*(string*Value) list)[]) =
         let tableName = getRoot tableName
         let parseData = Array.rev parseData
 
         let makeTable (elems:(string*Value) list) =
-            (Table(),elems) ||> List.fold (fun tbl (k,v) -> tbl.Add(keyName k,v)|>ignore; tbl)
+            (Table (), elems) ||> List.fold (fun tbl (k,v) -> tbl.Add (keyName k,v)|>ignore; tbl)
 
-        let foldAoT (prev:string,aotAcc:Table list) (cur:string,elems:(string*Value) list)  =
+        let foldAoT (prev:string, aotAcc:Table list) (cur:string, elems:(string*Value) list)  =
 
             let key = keyName cur
             match prev, cur with
             | _, cur when cleanEnds cur = tableName ->
-                (cur,(makeTable elems)::aotAcc)
+                (cur, (makeTable elems)::aotAcc)
             | prev, cur when parentKey cur = tableName  && isAoT cur -> 
                 // case where an AoT needs to be created from scratch because this is nested in the first table in the AoT
                 match aotAcc with
                 | [] -> 
-                    let tbl = Table()
-                    tbl.Add(key,Value.ArrayOfTables[(makeTable elems)])|>ignore
-                    (cur,[tbl])
+                    let tbl = Table ()
+                    tbl.Add (key, Value.ArrayOfTables[(makeTable elems)])|>ignore
+                    (cur, [tbl])
                 | hd::_ ->
                     if hd.ContainsKey key then
                         match hd.Elem key with
                         | Value.ArrayOfTables ls -> 
-                            aotAcc.Head.Elem(key) <- Value.ArrayOfTables((makeTable elems)::ls)
+                            aotAcc.Head.Elem key <- Value.ArrayOfTables((makeTable elems)::ls)
                         | _ -> ()
                     else
-                        hd.Add(key,Value.ArrayOfTables[(makeTable elems)])|>ignore
+                        hd.Add (key, Value.ArrayOfTables[(makeTable elems)])|>ignore
                     (prev,(makeTable elems)::aotAcc)
-            | prev,cur when prev = cur && cleanEnds cur = tableName -> 
-                (cur,(makeTable elems)::aotAcc)
-            | prev,cur when parentKey cur = tableName && (not<<isAoT) cur ->  
-                aotAcc.Head.Add (key,(makeTable elems))|> ignore
+            | prev ,cur when prev = cur && cleanEnds cur = tableName -> 
+                (cur, (makeTable elems)::aotAcc)
+            | prev, cur when parentKey cur = tableName && (not<<isAoT) cur ->  
+                aotAcc.Head.Add (key, (makeTable elems))|> ignore
                 (prev, aotAcc)
 
-            | prev,cur ->   failwithf "reached unhandled Array of Table Case with - \n%s\nprev - %s\ncurrent - %s\n%A" tableName prev cur elems
+            | prev,cur ->   failwithf "reached unhandled Array of Table Case with - \n\
+                                       %s\nprev - %s\ncurrent - %s\n%A" tableName prev cur elems
         (("",[]),parseData) ||> Array.fold foldAoT 
         |> fun (_,v) -> 
             Value.ArrayOfTables v
@@ -469,7 +465,7 @@ module Parsers =
             match findMaxes ls with
             | 0,0 -> ()
             | maxklen, maxvlen -> 
-                ls |> List.iter(fun (key,value) ->
+                ls |> List.iter (fun (key,value) ->
                     sprintf "%-*s = %-*s" maxklen key maxvlen (string value)
                     |> sb.AppendLine |> ignore )
         tables 
@@ -483,7 +479,7 @@ module Parsers =
         string sb
 
 
-    let tomstructor =
+    let parse_toml_table =
         toml_section .>>. (section_splitter |>> fun ls ->
             Array.ofList ls |> Array.Parallel.map parse_block)
         |>> construct_toml
@@ -499,12 +495,12 @@ module Read =
     open Parsers
     /// Read TOML data out of a file at `path`
     let readTomlFile (path:string) =
-        match runParserOnFile tomstructor () path (Text.Encoding.UTF8) with
+        match runParserOnFile parse_toml_table () path (Text.Encoding.UTF8) with
         | Failure (errorMsg,_,_) -> failwith errorMsg
         | Success (result,_,_)   -> result
 
     /// Read TOML data out of a string
     let readTomlString (text:string) =
-        match runParserOnString tomstructor () "toml" text with
+        match runParserOnString parse_toml_table () "toml" text with
         | Failure (errorMsg,_,_) -> failwith errorMsg
         | Success (result,_,_)   -> result
