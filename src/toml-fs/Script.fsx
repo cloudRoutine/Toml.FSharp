@@ -303,23 +303,30 @@ module complex_tests =
 
 
 
-[
-    toml0
-    toml1
-    toml2
-    toml3
-    toml4
-    toml5   
-    toml6   
-] |> fun x ->
-  //  x |> List.iter (prun parse_to_print)
-    //x |> List.iter (prun tomstructor)
-    x |> List.iter (prun tomstructor
-    //    |> fun y -> y
-    
-    )
-        
+//[
+//    toml0
+//    toml1
+//    toml2
+//    toml3
+//    toml4
+//    toml5   
+//    toml6   
+//] |> fun x ->
+//  //  x |> List.iter (prun parse_to_print)
+//    //x |> List.iter (prun tomstructor)
+//    x |> List.iter (prun tomstructor
+//    //    |> fun y -> y
+//    
+//    )
+//        
+let parseString parser str =
+//    match runParserOnString parser () "toml parser test" str with
+//    | Success (result,_,_) -> result
+//    | Failure (errmsg,_,_) -> failwith errmsg
+    runParserOnString parser () "toml parser test" str
+;;
 
-
-
+parseString basic_string_char "z";;
+parseString basic_string "\"line1\\nline2\\nline3\\n\"";;
+parseString basic_string "\"?\"";;
 

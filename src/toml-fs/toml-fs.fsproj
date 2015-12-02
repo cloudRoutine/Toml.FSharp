@@ -48,6 +48,7 @@
     <Compile Include="AST.fs" />
     <Compile Include="Parsers.fs" />
     <None Include="Script.fsx" />
+    <None Include="datatypes.fsx" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
