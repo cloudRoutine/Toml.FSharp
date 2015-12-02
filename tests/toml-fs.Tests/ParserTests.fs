@@ -19,22 +19,46 @@ open TomlFs.Parsers
 open TomlFs.Tests.Prelude
 open TomlFs.Tests.Generators
 
+let longCheck x =
+    Check.One
+        ({ Config.QuickThrowOnFailure with  
+            MaxTest = 10000; StartSize = 50; EndSize = 700}, x )
+
 
 let [<Test>] ``parses all basic strings`` () =
+    longCheck <|
     Prop.forAll basic_string_gen (fun (str:string) ->
         (str.Length > 3) ==>
             match parseString basic_string str with
             | ParserResult.Success(_,_,_) -> true
             | ParserResult.Failure(_,_,_) -> false) 
-    |> fun x -> 
-        Check.One({Config.QuickThrowOnFailure with  
-                    MaxTest     = 25000 
-                    StartSize   = 50    
-                    EndSize     = 2000  
-                    }, x )
 
 
+let [<Test>] ``parses all multi strings`` () =
+    longCheck <|
+    Prop.forAll multi_string_gen (fun (str:string) ->
+        (str.Length > 6) ==>
+            match parseString multi_string str with
+            | ParserResult.Success(_,_,_) -> true
+            | ParserResult.Failure(_,_,_) -> false) 
 
+
+let [<Test>] ``parses all literal strings`` () =
+    longCheck <|
+    Prop.forAll literal_string_gen (fun (str:string) ->
+        (str.Length > 3) ==>
+            match parseString literal_string str with
+            | ParserResult.Success(_,_,_) -> true
+            | ParserResult.Failure(_,_,_) -> false) 
+
+
+let [<Test>] ``parses all multi literal strings`` () =
+    longCheck <|
+    Prop.forAll multi_lit_string_gen (fun (str:string) ->
+        (str.Length > 6) ==>
+            match parseString multi_literal_string str with
+            | ParserResult.Success(_,_,_) -> true
+            | ParserResult.Failure(_,_,_) -> false) 
 
 
 
@@ -42,5 +66,8 @@ let [<Test>] ``parses all basic strings`` () =
 
 #if INTERACTIVE
 ``parses all basic strings`` ()
+``parses all multi strings`` ()
+``parses all literal strings`` ()
+``parses all multi literal strings`` () 
 #endif
 

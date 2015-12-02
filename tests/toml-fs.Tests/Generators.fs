@@ -11,14 +11,13 @@ open FsCheck
 
 
 let genCtrlSeq =
-    [for hex in 0x00..0x1f -> char hex]
-    |> (Gen.elements>>Gen.map(fun c -> [|'\\';c|]))
+    [0x00..0x1f] |> (Gen.elements>>Gen.map(char>>fun c -> [|'\\';c|]))
 
 let genEscSeq =
     ['b';'t';'n';'f';'r';'"';'\\']
     |> (Gen.elements>>Gen.map(fun c -> [|'\\';c|]))
 
-
+/// generate a unicode char that doesn't need to be escaped
 let genUnicode =
     let make = Gen.choose>>Gen.map(fun x ->[| char x |])
     Gen.frequency 
@@ -27,18 +26,33 @@ let genUnicode =
             270     , (0x40, 0x5b   ) |> make
             4000    , (0x5d, 0x9fff ) |> make ]
 
-// 0x22 is `"`
+let litset = // skip \n 0x10, \r 0x13, `'` 0x27
+    [100,[0x00..0x09]@[0x11;0x12]@[0x14..0x26]@[0x28..0x1f]
+        |> (Gen.elements>>Gen.map (fun x -> [| char x |]))]
 
+let multilitset =
+    [100, [0x00..0x1f]|> (Gen.elements>>Gen.map (fun x -> [| char x |]))]
 
-let genBasicString = 
-    let genArr = Gen.frequency [32,genCtrlSeq; 7,genEscSeq ;4000,genUnicode]|> Gen.arrayOf
+let genscaffold sqs delim = 
+    let genArr = Gen.frequency sqs |> Gen.arrayOf
     Gen.map2
         (fun arr uc -> 
             let flat =  Array.concat arr
-            let quoted = Array.concat [[|'\"'|];flat;uc;[|'\"'|]]
+            let quoted = Array.concat [delim;flat;uc;delim]
             String quoted) genArr genUnicode 
 
-let basic_string_gen = Arb.fromGen genBasicString
+let basicSet = [32,genCtrlSeq; 7,genEscSeq ;4000,genUnicode] 
+let multiSet = [100,gen { return [|'\n'|]}]@basicSet
+
+let genBasicString    = genscaffold basicSet [|'\"'|]
+let genMultiString    = genscaffold multiSet [|'\"';'\"';'\"'|]
+let genLiteralString  = genscaffold litset   [|'\''|]
+let genMultiLitString = genscaffold multiSet [|'\'';'\'';'\''|]
+
+let basic_string_gen    = Arb.fromGen genBasicString 
+let multi_string_gen    = Arb.fromGen genMultiString
+let literal_string_gen  = Arb.fromGen genLiteralString
+let multi_lit_string_gen = Arb.fromGen genMultiLitString
 
 type BasicString = static member String () = basic_string_gen
 

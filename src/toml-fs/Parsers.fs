@@ -50,7 +50,7 @@ module Parsers =
     let ``|"|``   : Parser<_> = prevCharNot isEscChar >>. pchar '"'
     let ``|'|``   : Parser<_> = prevCharNot isEscChar >>. pchar '\''
     let ``|"""|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\"\"\""
-    let ``|'''|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\'\'\'"
+    let ``|'''|`` : Parser<_> = prevCharNot isEscChar >>. pstring "'''"
     let skipEqs   : Parser<_> = skipChar '=' >>. skip_tspcs
 
     
@@ -84,7 +84,8 @@ module Parsers =
 
     let rec string_char flag startIndex (stream: CharStream<_>) =
         match stream.Peek () with
-        | '"' when flag -> ``"`` stream // `"` doesn't need to be escaped in a multi-line string
+        | '"' when flag -> // `"` doesn't need to be escaped in a multi-line string
+            (``"``.>>notFollowedBy ``"``.>>notFollowedBy ``"``) stream 
         | '\\' -> 
             match stream.Peek2 () with
             | twoChar when isCtrlChar twoChar.Char1  
@@ -140,10 +141,13 @@ module Parsers =
 
 
     let literal_string : Parser<_> = 
-        between ``|'|``   ``|'|`` (manySatisfy (isNoneOf['\'';'\n']))
+        between ``|'|``   ``|'|`` (manySatisfy (isNoneOf['\'';'\n';'\r']))
 
 
     let multi_literal_string : Parser<_> = 
+      //  let q = satisfy '"' .>> nextCharSatisfiesNot ((=)'"')
+        
+     //    .>> notFollowedBy notFollowedBy ``"``
         let mlit_char = choice [attempt(unicodeNewline>>.manySatisfy isAnyChar);manySatisfy isAnyChar]
         between ``|'''|`` ``|'''|`` mlit_char
     
