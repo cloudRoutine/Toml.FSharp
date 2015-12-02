@@ -1,12 +1,6 @@
-﻿//#if INTERACTIVE
-//#load "Prelude.fs"
-//open TomlFs.Prelude
-//#else
-//module TomlFs.AST
-//#endif
-module TomlFs.AST
-
+﻿module TomlFs.AST
 #nowarn "62"
+
 open System
 open System.Text
 open System.Collections.Generic
