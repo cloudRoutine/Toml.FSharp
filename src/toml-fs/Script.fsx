@@ -302,10 +302,7 @@ module complex_tests =
 
 
 
-let d = DateTime()
 
-string d;;
-d.ToString();;
 //[
 //    toml0
 //    toml1
@@ -322,8 +319,14 @@ d.ToString();;
 //    
 //    )
 //        
+let parseString parser str =
+//    match runParserOnString parser () "toml parser test" str with
+//    | Success (result,_,_) -> result
+//    | Failure (errmsg,_,_) -> failwith errmsg
+    runParserOnString parser () "toml parser test" str
+;;
 
-let t = Table();;
-t.Add ("the.nested.nature.of.tables.is.quite.intriguing.to.me.I.wonder.how.far.it.goes",Value.Int 22L);;
-printfn "%A" t;;
+parseString basic_string_char "z";;
+parseString basic_string "\"line1\\nline2\\nline3\\n\"";;
+parseString basic_string "\"?\"";;
 

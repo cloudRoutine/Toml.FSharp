@@ -36,7 +36,8 @@ module Parsers =
     let ``"""`` : Parser<_> = pstring "\"\"\""
     let ``'''`` : Parser<_> = pstring "\'\'\'"
 
-    let inline isEscChar c = c = '\\'
+
+    let inline isEscChar c = c = '\\'    
     // parsers for string bounds that won't be fooled by escaped quotes
     let prevCharNot = previousCharSatisfiesNot
     let prevCharIs  = previousCharSatisfies 
@@ -46,19 +47,57 @@ module Parsers =
     let ``|'''|`` : Parser<_> = prevCharNot isEscChar >>. pstring "\'\'\'"
     let skipEqs   : Parser<_> = skipChar '=' >>. skip_tspcs
 
-    let combo = [ 0x00..0x1f ] |> List.reduce (fun acc elm -> acc ||| elm)
-
-    // unicode control chars
-    let ctrlChar  : Parser<_> = 
-        prevCharIs isEscChar 
-        >>. satisfyL (isAnyOf [for hex in 0x00..0x1f -> char hex]) 
-            "Unicode control charaters must be escaped"
-
-
     (*| String Parsers |*)
 
-    // TODO - fully implement string spec
-    // probably need to make a low level string parser
+    let (|EscChar|_|)  ch (twoChar:TwoChars) = if TwoChars('\\',ch) = twoChar then Some EscChar else None
+
+    // unicode control chars
+    let isCtrlChar = isAnyOf ([for hex in 0x00..0x1f -> char hex]@['?'])
+
+    let ctrlChar  : Parser<_> = 
+        let ctrlLabel = "Unicode Control Characters [0x00-0x1f] and `?` must be preceded by a `\` in basic TOML strings"
+        (prevCharIs isEscChar >>. satisfyL isCtrlChar ctrlLabel) <??> ctrlLabel
+    
+    let ``\``          : Parser<_> = pchar '\\' 
+    let ``\b``         : Parser<_> = ``\`` >>. pchar 'b'  >>% '\u0008'
+    let ``\t``         : Parser<_> = ``\`` >>. pchar 't'  >>% '\u0009'
+    let ``\n``         : Parser<_> = ``\`` >>. pchar 'n'  >>% '\u000A'
+    let ``\f``         : Parser<_> = ``\`` >>. pchar 'f'  >>% '\u000C'
+    let ``\r``         : Parser<_> = ``\`` >>. pchar 'r'  >>% '\u000D'
+    let ``\"``         : Parser<_> = ``\`` >>. pchar '"'  >>% '\u0022'
+    let ``\\``         : Parser<_> = ``\`` >>. pchar '\\' >>% '\u005C'
+    let ``\uXXXX``     : Parser<_> = ``\`` >>. pchar 'u'  >>. anyString 4 |>> (sprintf "\u%s">> Char.Parse)
+    let ``\UXXXXXXXX`` : Parser<_> = ``\`` >>. pchar 'U'  >>. anyString 8 |>> (sprintf "\U%s">> Char.Parse)
+
+    let basic_string_char (stream: CharStream<_>) =
+        let newline_error = 
+            Reply( Error,  " parsed a linebreak in a basic string. Linebreaks are not valid in \
+                            Toml basic strings"|> messageError)
+        match stream.Peek() with
+        | '\\' -> 
+            match stream.Peek2() with
+            | EscChar 'b'  -> ``\b``         stream
+            | EscChar 't'  -> ``\t``         stream
+            | EscChar 'n'  -> ``\n``         stream
+            | EscChar 'f'  -> ``\f``         stream
+            | EscChar 'r'  -> ``\r``         stream
+            | EscChar '"'  -> ``\"``         stream
+            | EscChar '\\' -> ``\\``         stream
+            | EscChar 'u'  -> ``\uXXXX``     stream
+            | EscChar 'U'  -> ``\UXXXXXXXX`` stream
+            | EscChar '\n' -> newline_error
+            | twoChar      -> 
+                Reply (Error, 
+                    sprintf "'\\%c' is not a valid TOML escape character\n\
+                            Only the following esc sequences are accepted :\n\
+                            \\b \\t \\n \\f \\r \\\" \\\\ \\uXXXX \\UXXXXXXXX" 
+                            twoChar.Char1 |> messageError)
+        | '\n' -> newline_error
+        | c when isCtrlChar c -> ctrlChar stream
+        | _ -> satisfy (isNoneOf['"']) stream
+
+    let basic_string = between ``|"|``   ``|"|``   (many1Chars basic_string_char)
+        
 
     let psingle_string    : Parser<_> = between ``|"|``   ``|"|``   (manyChars (choice
                                                                        [prevCharIs isEscChar >>. ``"``
