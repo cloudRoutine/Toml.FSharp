@@ -9,6 +9,9 @@ let inline (|&|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x && pred2 x
 /// Compose predicates with `||`
 let inline (|?|) (pred1:'a->bool) (pred2:'a->bool) = fun x -> pred1 x || pred2 x
 
+let inline isNull v = match v with | null -> true | _ -> false
+
+
 [<RequireQualifiedAccess>] 
 module  List =
     let inline last ls = 
@@ -19,7 +22,43 @@ module  List =
 
 [<RequireQualifiedAccess>] 
 module  Array =
+
+    let inline private checkNonNull argName arg = 
+        match box arg with 
+        | null -> nullArg argName 
+        | _ -> ()
+
+
+    let head (array: 'T []) =
+         checkNonNull "array" array
+         if array.Length = 0 then invalidArg "array" "cannot get the head of an empty array"
+         array.[0]
+
+
     let inline last (array:'a[]) = array.[array.Length-1]
+
+
+    /// Return an array of elements that preceded the first element that failed
+    /// to satisfy the predicate
+    let takeWhile predicate (array: 'T []) =
+        checkNonNull "array" array
+        if array.Length = 0 then [||] else
+        let mutable count = 0
+        while count < array.Length-1 && predicate array.[count] do
+            count <- count + 1
+        array.[0..count-1]
+
+
+    /// Return an array of elements that begin at the first element that failed
+    /// to satisfy the predicate
+    let skipWhile predicate (array: 'T []) =
+        checkNonNull "array" array
+        if array.Length = 0 then [||] else
+        let mutable count = 0
+        while count < array.Length-1 && predicate array.[count] do
+            count <- count + 1
+        array.[count..array.Length-1]
+
 
 type 'a ``[]`` with
     member array.Last = array.[array.Length-1]
@@ -43,7 +82,11 @@ module String =
         str.Split '\n' |> Array.map (fun x -> spc + x) |> String.concat "\n"
 
 
+
+(*---------------------------------------------*)
 (* Helper functions for working with TOML keys *)
+(*---------------------------------------------*)
+
 
 let inline cleanEnds key =
     if   String.bookends "[[" "]]" key then key.[2..key.Length-3]

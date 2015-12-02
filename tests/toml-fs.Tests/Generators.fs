@@ -1,8 +1,51 @@
-﻿module TomlFs.Tests.Generators
-
+﻿[<AutoOpen>]
+module TomlFs.Tests.Generators
+open System
+open System.Text
 open FsCheck
 
 
+(*|-------------------|*)
+(*| String Generators |*)
+(*|-------------------|*)
+
+
+let genCtrlSeq =
+    [for hex in 0x00..0x1f -> char hex]
+    |> (Gen.elements>>Gen.map(fun c -> [|'\\';c|]))
+
+let genEscSeq =
+    ['b';'t';'n';'f';'r';'"';'\\']
+    |> (Gen.elements>>Gen.map(fun c -> [|'\\';c|]))
+
+
+let genUnicode =
+    let make = Gen.choose>>Gen.map(fun x ->[| char x |])
+    Gen.frequency 
+        [   2       , (0x20, 0x21   ) |> make
+            270     , (0x23, 0x3e   ) |> make
+            270     , (0x40, 0x5b   ) |> make
+            4000    , (0x5d, 0x9fff ) |> make ]
+
+// 0x22 is `"`
+
+
+let genBasicString = 
+    let genArr = Gen.frequency [32,genCtrlSeq; 7,genEscSeq ;4000,genUnicode]|> Gen.arrayOf
+    Gen.map2
+        (fun arr uc -> 
+            let flat =  Array.concat arr
+            let quoted = Array.concat [[|'\"'|];flat;uc;[|'\"'|]]
+            String quoted) genArr genUnicode 
+
+let basic_string_gen = Arb.fromGen genBasicString
+
+type BasicString = static member String () = basic_string_gen
+
+
+
+// try generating \uXXXX and \UXXXXXXXX as char arrays and then convert to string
+// make sure they're out of the range of contorl chars
 
 (* 
 
@@ -35,14 +78,14 @@ open FsCheck
 
 * Bare Keys
 ------------
-
+Bare keys may only contain letters, numbers, underscores, and dashes (A-Za-z0-9_-). 
+Note that bare keys are allowed to be composed of only digits, e.g. 1234. 
 
 * Quoted Keys
 -------------
-
+Basic strings interspersed with `.`
 
 
 *)
-
 
 

@@ -59,32 +59,36 @@ module Parsers =
     (*|----------------|*)
 
 
-    let (|EscChar|_|) ch (twoChar:TwoChars) = if TwoChars('\\',ch) = twoChar then Some EscChar else None
+    let ``\``          : Parser<_> = pchar '\\' 
 
-    // unicode control chars
-    let isCtrlChar = isAnyOf ([for hex in 0x00..0x1f -> char hex]@['?'])
+    // unicode control chars  0x00..0x1f is 0-31
+    let isCtrlChar = isAnyOf ([for hex in 0x00..0x1f -> char hex])
 
     let ctrlChar  : Parser<_> = 
-        let ctrlLabel = "Unicode Control Characters [0x00-0x1f] and `?` must be preceded by a `\` in basic TOML strings"
-        (prevCharIs isEscChar >>. satisfyL isCtrlChar ctrlLabel) <??> ctrlLabel
-    
-    let ``\``          : Parser<_> = pchar '\\' 
+        let ctrlLabel = "Unicode Control Characters [0x00-0x1f] must be preceded by a `\` in basic TOML strings"
+        (``\`` >>. satisfyL isCtrlChar ctrlLabel) <??> ctrlLabel
+
+    let (|EscChar|_|) ch (twoChar:TwoChars) = if TwoChars('\\',ch) = twoChar then Some EscChar else None
+
+
+
     let ``\b``         : Parser<_> = ``\`` >>. pchar 'b'  >>% '\u0008'
     let ``\t``         : Parser<_> = ``\`` >>. pchar 't'  >>% '\u0009'
     let ``\n``         : Parser<_> = ``\`` >>. pchar 'n'  >>% '\u000A'
     let ``\f``         : Parser<_> = ``\`` >>. pchar 'f'  >>% '\u000C'
     let ``\r``         : Parser<_> = ``\`` >>. pchar 'r'  >>% '\u000D'
     let ``\"``         : Parser<_> = ``\`` >>. pchar '"'  >>% '\u0022'
-    let ``\\``         : Parser<_> = ``\`` >>. pchar '\\' >>% '\u005C'
+    let ``\\``         : Parser<_> = ``\`` >>. ``\``      >>% '\u005C'
     let ``\uXXXX``     : Parser<_> = ``\`` >>. pchar 'u'  >>. anyString 4 |>> (sprintf "\u%s">> Char.Parse)
     let ``\UXXXXXXXX`` : Parser<_> = ``\`` >>. pchar 'U'  >>. anyString 8 |>> (sprintf "\U%s">> Char.Parse)
 
-
-    let rec private string_char flag startIndex (stream: CharStream<_>) =
+    let rec string_char flag startIndex (stream: CharStream<_>) =
         match stream.Peek () with
         | '"' when flag -> ``"`` stream // `"` doesn't need to be escaped in a multi-line string
         | '\\' -> 
             match stream.Peek2 () with
+            | twoChar when isCtrlChar twoChar.Char1  
+                           -> ctrlChar       stream
             | EscChar 'b'  -> ``\b``         stream
             | EscChar 't'  -> ``\t``         stream
             | EscChar 'n'  -> ``\n``         stream
@@ -106,8 +110,9 @@ module Parsers =
                 Reply (Error, 
                     sprintf "'\\%c' is not a valid TOML escape character\n\
                             Only the following esc sequences are accepted :\n\
-                            \\b \\t \\n \\f \\r \\\" \\\\ \\uXXXX \\UXXXXXXXX" 
-                            twoChar.Char1 |> messageError)
+                            \\b \\t \\n \\f \\r \\\" \\\\ \\uXXXX \\UXXXXXXXX\n\
+                            Ln %i Col %i" 
+                            twoChar.Char1 stream.Line stream.Column |> messageError)
         | '\n' -> 
             if flag && stream.Index = (startIndex+3L) then 
                 stream.SkipNewline () |> ignore 
@@ -115,19 +120,23 @@ module Parsers =
             elif flag then unicodeNewline stream else            
             Reply( Error,  "parsed a linebreak in a basic string. Linebreaks are not valid in \
                             Toml basic strings"|> messageError)
-        | c when isCtrlChar c -> ctrlChar stream
         | _ -> satisfy (isNoneOf['"']) stream
 
+    let basic_string_content: Parser<_> = many1Chars (string_char false 0L)
 
     let basic_string : Parser<_> = 
-        between ``|"|``   ``|"|``   (many1Chars (string_char false 0L))
+        between ``|"|``   ``|"|`` basic_string_content
+
+    let multi_string_content: Parser<_> = 
+        let inline psr (stream:CharStream<_>) =
+            let multi_string_char = string_char true stream.Index
+            (many1Chars multi_string_char) stream
+        psr
 
 
     let multi_string : Parser<_> = 
-        let inline psr (stream:CharStream<_>) =
-            let multi_string_char = string_char true stream.Index
-            (between ``|"""|`` ``|"""|`` (many1Chars multi_string_char)) stream
-        psr
+        between ``|"""|`` ``|"""|`` multi_string_content
+
 
 
     let literal_string : Parser<_> = 
