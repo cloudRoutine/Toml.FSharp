@@ -86,6 +86,7 @@ module Parsers =
         match stream.Peek () with
         | '"' when flag -> // `"` doesn't need to be escaped in a multi-line string
             (``"``.>>notFollowedBy ``"``.>>notFollowedBy ``"``) stream 
+            //(``"``) stream 
         | '\\' -> 
             match stream.Peek2 () with
             | twoChar when isCtrlChar twoChar.Char1  
@@ -131,7 +132,8 @@ module Parsers =
     let multi_string_content: Parser<_> = 
         let inline psr (stream:CharStream<_>) =
             let multi_string_char = string_char true stream.Index
-            (many1Chars multi_string_char) stream
+            //let msc = multi_string_char.>>notFollowedBy ``"``.>>notFollowedBy ``"``
+            (many1CharsTill multi_string_char  (lookAhead ``|"""|``)) stream
         psr
 
 
