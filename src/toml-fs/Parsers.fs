@@ -70,8 +70,6 @@ module Parsers =
 
     let (|EscChar|_|) ch (twoChar:TwoChars) = if TwoChars('\\',ch) = twoChar then Some EscChar else None
 
-
-
     let ``\b``         : Parser<_> = ``\`` >>. pchar 'b'  >>% '\u0008'
     let ``\t``         : Parser<_> = ``\`` >>. pchar 't'  >>% '\u0009'
     let ``\n``         : Parser<_> = ``\`` >>. pchar 'n'  >>% '\u000A'
@@ -86,7 +84,6 @@ module Parsers =
         match stream.Peek () with
         | '"' when flag -> // `"` doesn't need to be escaped in a multi-line string
             (``"``.>>notFollowedBy ``"``.>>notFollowedBy ``"``) stream 
-            //(``"``) stream 
         | '\\' -> 
             match stream.Peek2 () with
             | twoChar when isCtrlChar twoChar.Char1  
@@ -132,7 +129,6 @@ module Parsers =
     let multi_string_content: Parser<_> = 
         let inline psr (stream:CharStream<_>) =
             let multi_string_char = string_char true stream.Index
-            //let msc = multi_string_char.>>notFollowedBy ``"``.>>notFollowedBy ``"``
             (many1CharsTill multi_string_char  (lookAhead ``|"""|``)) stream
         psr
 
@@ -147,10 +143,8 @@ module Parsers =
 
 
     let multi_literal_string : Parser<_> = 
-      //  let q = satisfy '"' .>> nextCharSatisfiesNot ((=)'"')
-        
-     //    .>> notFollowedBy notFollowedBy ``"``
-        let mlit_char = choice [attempt(unicodeNewline>>.manySatisfy isAnyChar);manySatisfy isAnyChar]
+        let psr = many1CharsTill (satisfy isAnyChar) (lookAhead ``|'''|``)
+        let mlit_char = choice[ attempt (unicodeNewline>>.psr); psr ]
         between ``|'''|`` ``|'''|`` mlit_char
     
 

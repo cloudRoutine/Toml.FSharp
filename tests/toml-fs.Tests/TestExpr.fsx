@@ -38,10 +38,10 @@ open TomlFs.Parsers
 //let x = "\"㭀醦䷛觚᧑锕෶ \""
 //parseString basic_string x;;
 //x.ToCharArray();;
-let ms = "\"\"\"&朞蹼⡁扌鬈㓍尫阶⽏梷逕⤮挹鲡⑜崘霣ヨ榤鄂⭪擒鶎╉庱颼O欽Yⴃ3鼧=惭馩㍮嫌鎈ⷰ\q⟏S魂O容ᔇ\"\"\"";;
+let ms = "\"\"\"_______\"\"\"";;
 parseString multi_string ms;;
 
-parseString multi_literal_string "'''鞘㈀歨ҁ⯟旪齒㡫燓餱㎙汕ؚ⵸枃U喦'''"
+parseString multi_literal_string "'''_______'''"
 //
 //let s = String([|'"';'\\';'\022';'"'|]);;
 //s.ToCharArray();;
