@@ -66,6 +66,7 @@
     <Compile Include="Prelude.fs" />
     <Compile Include="Generators.fs" />
     <Compile Include="ParserTests.fs" />
+    <Compile Include="TableTests.fs" />
     <None Include="TestExpr.fsx" />
     <None Include="paket.references" />
     <Content Include="app.config" />

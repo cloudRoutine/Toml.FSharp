@@ -40,7 +40,7 @@ module Parsers =
     let ``'``   : Parser<_> = pchar   '\''
     let ``"""`` : Parser<_> = pstring "\"\"\""
     let ``'''`` : Parser<_> = pstring "\'\'\'"
-
+    let ``\``   : Parser<_> = pchar '\\' 
 
     let inline isEscChar c = c = '\\'  
     let inline isAnyChar _ = true  
@@ -58,8 +58,6 @@ module Parsers =
     (*| String Parsers |*)
     (*|----------------|*)
 
-
-    let ``\``          : Parser<_> = pchar '\\' 
 
     // unicode control chars  0x00..0x1f is 0-31
     let isCtrlChar = isAnyOf ([for hex in 0x00..0x1f -> char hex])
@@ -83,7 +81,7 @@ module Parsers =
     let rec string_char flag startIndex (stream: CharStream<_>) =
         match stream.Peek () with
         | '"' when flag -> // `"` doesn't need to be escaped in a multi-line string
-            (``"``.>>notFollowedBy ``"``.>>notFollowedBy ``"``) stream 
+            (``"``.>> notFollowedBy ``"``.>> notFollowedBy ``"``) stream 
         | '\\' -> 
             match stream.Peek2 () with
             | twoChar when isCtrlChar twoChar.Char1  
@@ -98,20 +96,20 @@ module Parsers =
             | EscChar 'u'  -> ``\uXXXX``     stream
             | EscChar 'U'  -> ``\UXXXXXXXX`` stream
             | EscChar '\n' when flag -> 
-                    // For writing long strings without introducing extraneous whitespace, end a line with a \. 
-                    // The \ will be trimmed along with all whitespace (including newlines) up to the next 
-                    // non-whitespace character or closing delimiter.
-                    stream.Skip ()                    
-                    stream.SkipUnicodeNewline ()     |> ignore
-                    stream.SkipUnicodeWhitespace ()  |> ignore
-                    string_char true startIndex stream
+                // For writing long strings without introducing extraneous whitespace, end a line with a \. 
+                // The \ will be trimmed along with all whitespace (including newlines) up to the next 
+                // non-whitespace character or closing delimiter.
+                stream.Skip ()                    
+                stream.SkipUnicodeNewline ()     |> ignore
+                stream.SkipUnicodeWhitespace ()  |> ignore
+                string_char true startIndex stream
             | twoChar      -> 
-                Reply (Error, 
-                    sprintf "'\\%c' is not a valid TOML escape character\n\
-                            Only the following esc sequences are accepted :\n\
-                            \\b \\t \\n \\f \\r \\\" \\\\ \\uXXXX \\UXXXXXXXX\n\
-                            Ln %i Col %i" 
-                            twoChar.Char1 stream.Line stream.Column |> messageError)
+                Reply (Error, messageError <| sprintf 
+                    "'\\%c' is not a valid TOML escape character\n\
+                    Only the following esc sequences are accepted :\n\
+                    \\b \\t \\n \\f \\r \\\" \\\\ \\uXXXX \\UXXXXXXXX\n\
+                    Ln %i Col %i" 
+                    twoChar.Char1 stream.Line stream.Column )
         | '\n' -> 
             if flag && stream.Index = (startIndex+3L) then 
                 stream.SkipNewline () |> ignore 
@@ -170,23 +168,32 @@ module Parsers =
 
 
     let pInt64_toml : Parser<_> = 
-        choice[ 
-            pstring "0";
+//        choice [ pstring "0";
+//            followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
+//                >>. many1Chars (prevCharIs isDigit >>. skipChar '_' >>. digit <|> digit)
+//                .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
+//        ] |>> int64 
+
+        choice [ pstring "0";
             followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
-            >>. many1Chars (prevCharIs isDigit >>. skipChar '_' >>. digit <|> digit)
-            .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"]
-        |>> int64 
+                >>. (satisfy (isAnyOf['+';'-']|?|isDigit)) 
+                    .>>. many1Chars (prevCharIs isDigit >>. skipChar '_' >>. digit <|> digit)
+                    .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
+                    |>> fun (a,b) -> string a + b
+        ] |>> int64 
+
+
 
 
     let isFloatChar = isDigit|?|isAnyOf['e';'E';'+';'-';'.']
 
     let pFloat_toml : Parser<_> = 
         let floatChar = satisfy isFloatChar
-        choice[
-            pstring "0.0";
-            followedByL (satisfy ((<>)'0')) "TOML floats cannot begin with leading 0s"  
-            >>. many1Chars (skipChar '_' >>. floatChar <|> floatChar)]
-        |>> float
+        let midChars  = many1Chars (skipChar '_' >>. floatChar <|> floatChar)
+        let label     = "TOML floats cannot begin with leading 0s unless 0.XXX "  
+        choice [(pstring "0." .>>. midChars |>> fun (a,b)->a+b );
+                followedByL (satisfy ((<>)'0')) label >>. midChars
+        ] |>> float
 
 
     let private toDateTime str =

@@ -38,14 +38,21 @@ open TomlFs.Parsers
 //let x = "\"㭀醦䷛觚᧑锕෶ \""
 //parseString basic_string x;;
 //x.ToCharArray();;
-let ms = "\"\"\"_______\"\"\"";;
-parseString multi_string ms;;
+//let ms = "\"\"\"_______\"\"\"";;
+//parseString multi_string ms;;
 
-parseString multi_literal_string "'''_______'''"
+
+parseString toml_float "1.79769313486232E+308";;
+
+//parseString multi_literal_string "'''_______'''"
 //
 //let s = String([|'"';'\\';'\022';'"'|]);;
 //s.ToCharArray();;
 //
 //parseString basic_string s;;
+
+
+
+
 
 

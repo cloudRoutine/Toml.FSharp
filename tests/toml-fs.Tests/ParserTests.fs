@@ -19,61 +19,60 @@ open TomlFs.Parsers
 open TomlFs.Tests.Prelude
 open TomlFs.Tests.Generators
 
-let longCheck x =
-    Check.One
-        ({ Config.QuickThrowOnFailure with  
-            MaxTest = 10000; StartSize = 50; EndSize = 700}, x )
+let inline throwConfig maxTest startSize endSize = 
+    { Config.QuickThrowOnFailure with MaxTest = maxTest; StartSize = startSize; EndSize = endSize}
+
+let longCheck x = Check.One (throwConfig 10000 50 700, x)
+let midCheck  x = Check.One (throwConfig 3000  20 300, x)
 
 
-let midCheck x =
-    Check.One
-        ({ Config.QuickThrowOnFailure with  
-            MaxTest = 3000; StartSize = 20; EndSize = 300}, x )
+(*|---------------------|*)
+(*| String Parser Tests |*)
+(*|---------------------|*)
+
+
+let parserTest bound parser  =
+    fun (str:string) -> 
+        (str.Length > bound) ==>
+            match parseString parser str with
+            | ParserResult.Success(_,_,_) -> true
+            | ParserResult.Failure(_,_,_) -> false 
+
+let stringParser psr = parserTest 6 psr
 
 let [<Test>] ``parses all basic strings`` () =
-    longCheck <|
-    Prop.forAll basic_string_arb (fun (str:string) ->
-        (str.Length > 3) ==>
-            match parseString basic_string str with
-            | ParserResult.Success(_,_,_) -> true
-            | ParserResult.Failure(_,_,_) -> false) 
+    longCheck <| Prop.forAll basic_string_arb (stringParser basic_string)
 
 
 let [<Test>] ``parses all multi strings`` () =
-    longCheck <|
-    Prop.forAll multi_string_arb (fun (str:string) ->
-        (str.Length > 6) ==>
-            match parseString multi_string str with
-            | ParserResult.Success(_,_,_) -> true
-            | ParserResult.Failure(_,_,_) -> false) 
-
+    longCheck <| Prop.forAll multi_string_arb (stringParser multi_string)
+    
 
 let [<Test>] ``parses all literal strings`` () =
-    longCheck <|
-    Prop.forAll literal_string_arb (fun (str:string) ->
-        (str.Length > 3) ==>
-            match parseString literal_string str with
-            | ParserResult.Success(_,_,_) -> true
-            | ParserResult.Failure(_,_,_) -> false) 
+    longCheck <| Prop.forAll literal_string_arb (stringParser literal_string)
 
 
 let [<Test>] ``parses all multi literal strings`` () =
-    longCheck <|
-    Prop.forAll multi_lit_string_arb (fun (str:string) ->
-        (str.Length > 6) ==>
-            match parseString multi_literal_string str with
-            | ParserResult.Success(_,_,_) -> true
-            | ParserResult.Failure(_,_,_) -> false) 
-
+    longCheck <| Prop.forAll multi_lit_string_arb (stringParser multi_literal_string)
 
 
 let [<Test>] ``unified string parser reads all toml string types`` () =
-    midCheck <|
-    Prop.forAll toml_string_arb (fun (str:string) ->
-        (str.Length > 6) ==>
-            match parseString toml_string str with
-            | ParserResult.Success(_,_,_) -> true
-            | ParserResult.Failure(_,_,_) -> false) 
+    midCheck <| Prop.forAll toml_string_arb (stringParser toml_string)
+
+
+(*|---------------------------|*)
+(*| Simple Value Parser Tests |*)
+(*|---------------------------|*)
+
+let valueParser psr = parserTest 3 psr
+
+let [<Test>] ``parses all ints`` () =
+    Check.QuickThrowOnFailure <| Prop.forAll toml_int_arb (valueParser toml_int)
+
+
+let [<Test>] ``parses all floats`` () =
+    Check.QuickThrowOnFailure <| Prop.forAll toml_float_arb (valueParser toml_float)
+
 
 
 
@@ -81,10 +80,21 @@ let [<Test>] ``unified string parser reads all toml string types`` () =
 
 
 #if INTERACTIVE
-``parses all basic strings`` ()
-``parses all multi strings`` ()
-``parses all literal strings`` ()
-``parses all multi literal strings`` () 
- ``parses all toml strings`` () 
+// Test Switches
+let stringTests     = false
+let simpleValueTests = true
+
+
+
+if stringTests then 
+    ``parses all basic strings`` ()
+    ``parses all multi strings`` ()
+    ``parses all literal strings`` ()
+    ``parses all multi literal strings`` () 
+    ``unified string parser reads all toml string types`` ()
+
+if simpleValueTests then
+    ``parses all ints`` ()
+    ``parses all floats`` ()
 #endif
 
