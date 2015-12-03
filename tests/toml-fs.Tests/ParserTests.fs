@@ -22,8 +22,9 @@ open TomlFs.Tests.Generators
 let inline throwConfig maxTest startSize endSize = 
     { Config.QuickThrowOnFailure with MaxTest = maxTest; StartSize = startSize; EndSize = endSize}
 
-let longCheck x = Check.One (throwConfig 10000 50 700, x)
-let midCheck  x = Check.One (throwConfig 3000  20 300, x)
+let longCheck   x = Check.One (throwConfig 10000 50 700, x)
+let midCheck    x = Check.One (throwConfig 3000  20 300, x)
+let shortCheck  x = Check.One (throwConfig 500   5  100, x)
 
 
 (*|---------------------|*)
@@ -64,6 +65,7 @@ let [<Test>] ``unified string parser reads all toml string types`` () =
 (*| Simple Value Parser Tests |*)
 (*|---------------------------|*)
 
+
 let valueParser psr = parserTest 3 psr
 
 let [<Test>] ``parses all ints`` () =
@@ -74,14 +76,25 @@ let [<Test>] ``parses all floats`` () =
     Check.QuickThrowOnFailure <| Prop.forAll toml_float_arb (valueParser toml_float)
 
 
+let [<Test>] ``parses bools`` () =
+    Check.Quick <| Prop.forAll toml_bool_arb (valueParser toml_bool )
+
+
+let [<Test>] ``parses all DateTimes`` () =
+    Check.QuickThrowOnFailure <| Prop.forAll toml_datetime_arb (valueParser toml_datetime)
+
+
+let [<Test>] ``parses all Arrays`` () =
+    shortCheck <| Prop.forAll toml_array_arb (valueParser toml_array)
 
 
 
+    
 
 
 #if INTERACTIVE
 // Test Switches
-let stringTests     = false
+let stringTests      = true
 let simpleValueTests = true
 
 
@@ -96,5 +109,9 @@ if stringTests then
 if simpleValueTests then
     ``parses all ints`` ()
     ``parses all floats`` ()
+    ``parses bools`` () 
+    ``parses all DateTimes`` ()
+
+``parses all Arrays`` ()
 #endif
 

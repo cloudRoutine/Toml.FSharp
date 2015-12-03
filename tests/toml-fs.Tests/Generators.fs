@@ -90,30 +90,8 @@ let genTomlInt =
     |> Gen.suchThat (lenBelow 20)
     |> Gen.map String
 
-//Double.MinValue -1.797693135e+308
-//Double.MaxValue 1.797693135e+308
- //              "1.79769313486232E+308";;
 
-
-//let genTomlFloat = 
-//    let num = (genCharr gen_first_digit, gen_mid_digits, gen_mid_digits)
-//                |||> Gen.map3 (fun digi0 midA midB -> Array.concat [digi0; midA; [|'.'|]; midA])
-//    let zerod = Gen.map (fun arr -> Array.concat [[|'0';'.'|];arr])  gen_mid_digits
-//                |> Gen.suchThat (lenBelow 8)
-//    let expn  = Gen.map3 (fun e digi0  digits -> Array.concat [e;digi0;digits]  )
-//                    (Gen.elements['e';'E'] |> genCharr)
-//                    (Gen.elements['+';'-'] |> genCharr)
-//                    (gen_mid_digits|> Gen.suchThat 
-//                        (fun x ->   let exp = (String x).Replace("_","")|> int
-//                                    exp < 308 && exp > -307)) //308 is max base 10 exponent
-//                |> Gen.suchThat (lenBelow 6)
-//    let numExpn   = Gen.map2 Array.append (num|>Gen.suchThat (lenBelow 6))   expn
-//    let zerodExpn = Gen.map2 Array.append zerod expn
-//    Gen.oneof [ num; zerod; numExpn; zerodExpn ] 
-//    |> Gen.suchThat (lenBelow 30)
-//    |> Gen.map String
-
-let rng = System.Random()
+let rng = System.Random ()
 
 let randomInsert (num:float) =
     let str = string num
@@ -121,9 +99,8 @@ let randomInsert (num:float) =
     let rec loop (idx,newStr:string) =
         if  idx <> dot   && idx <> dot+1 && idx <> dot-1 then
             if idx > newStr.Length-2 then newStr else
-            loop (idx + rng.Next(2,4),  newStr.Insert(idx,"_"))
-        else
-            loop (idx + rng.Next(2,4),newStr)
+            loop  (idx + rng.Next(2,4), newStr.Insert(idx,"_"))
+        else loop (idx + rng.Next(2,4), newStr)
     loop (2,str) 
 
 
@@ -131,16 +108,42 @@ let genTomlFloat =
     Arb.generate<float> |> Gen.suchThat (fun flt -> 
         flt <> Double.NegativeInfinity &&
         flt <> Double.PositiveInfinity &&
-        flt <> Double.NaN && 
-        flt < Double.MaxValue &&
-        flt > Double.MinValue) |> Gen.map randomInsert
+        flt <> Double.NaN       && 
+        flt <  Double.MaxValue  &&
+        flt >  Double.MinValue) 
+        |> Gen.map randomInsert |> Gen.suchThat (fun s -> s.IndexOf '.' <> -1)
 
 
+let genBool = Arb.generate<bool> |> Gen.map (fun x -> (string x).ToLower())
+
+let RFC3999DateTime (dateTime:DateTime) = dateTime.ToString "yyyy-MM-dd'T'HH:mm:ssZ"
+
+let full_datetime = Arb.generate<DateTime> |> Gen.map RFC3999DateTime
+
+let genDateTime = 
+    Gen.oneof [ full_datetime;
+        (full_datetime |> Gen.map(fun x -> x.Substring(0,20)))]
+
+let toml_int_arb        = Arb.fromGen genTomlInt
+let toml_float_arb      = Arb.fromGen genTomlFloat
+let toml_bool_arb       = Arb.fromGen genBool
+let toml_datetime_arb   = Arb.fromGen genDateTime
 
 
+let genArray =
+    [   Gen.listOf genTomlInt
+        Gen.listOf genTomlFloat
+        Gen.listOf genBool
+        Gen.listOf genDateTime 
+        Gen.listOf genTomlString
+        Gen.listOf genTomlFloat 
+        Gen.listOf genTomlInt
+        Gen.listOf (Arb.generate<int>  |> Gen.map string)
+    ] |> Gen.oneof |> Gen.map (String.concat ", ")
+        |> Gen.map (sprintf "[ %s ]")
+        
 
-let toml_int_arb    = Arb.fromGen genTomlInt
-let toml_float_arb  = Arb.fromGen genTomlFloat
+let toml_array_arb  = Arb.fromGen genArray
 
 (* 
 

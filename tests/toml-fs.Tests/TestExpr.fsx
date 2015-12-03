@@ -35,24 +35,17 @@ open TomlFs.Tests.Prelude
 open TomlFs.Tests.Generators
 open TomlFs.Parsers
 
+let RFC3999DateTime (dateTime:DateTime) = dateTime.ToString("yyyy-MM-dd'T'HH:mm:ssZ")
+RFC3999DateTime (DateTime(2000,10,22,9,44,14,35))
 //let x = "\"㭀醦䷛觚᧑锕෶ \""
 //parseString basic_string x;;
 //x.ToCharArray();;
 //let ms = "\"\"\"_______\"\"\"";;
 //parseString multi_string ms;;
 
-
-parseString toml_float "1.79769313486232E+308";;
-
-//parseString multi_literal_string "'''_______'''"
-//
-//let s = String([|'"';'\\';'\022';'"'|]);;
-//s.ToCharArray();;
-//
-//parseString basic_string s;;
-
-
-
-
+parseString toml_array "[ '%	\"	糒', \"L綮+㸥MᇵI爏1䗟纛ᡠ㾾⾏\", \"\"\"鵋
+> A䩔聣[䐕E᜹#矿)䬣蒋ᶤ䔂缍ᣒ冎瘕\"\"\", '!&!幒', '''校''', '䱿', \"\"\"豥埊豉
+叒屩俥托珞橄
+各悅@#衇⳪晒鼎㥶䷀\"\"\", \"\"\"〼伶掏瓵@焒毐葔ᥰ卻賣◼䵚蛂K姦腄ᬉ唔跐ᖋ仳裾∗孿苝᯶嘁A\"\"\", '%'', '''";;
 
 

@@ -288,7 +288,7 @@ module simple_tests =
 
 [<AutoOpen>] 
 module complex_tests =
-    let run_complex = false
+    let run_complex = true
 
     if run_complex then
         prun toml_inlineTable  "{ one = 1, two = 2, three = 3}"
@@ -297,8 +297,8 @@ module complex_tests =
         prun toml_array """[ [1,2,3], [1.0,2.0,3.0], ["a","b","c"], ]""" 
         prun toml_array  "[ 22.04 , 234.00, 23_4.304]" 
         prun toml_array "[ { x = 1, y = 2, z = 3 }, { x = 7, y = 8, z = 9 }, { x = 2, y = 4, z = 8 } ]" 
-        //prun toml_table table0 
-        //prun toml_table table1 
+       // prun parse_toml_table table0 
+      //  prun parse_toml_table table1 
         ;;
 
 
@@ -313,7 +313,7 @@ module complex_tests =
     toml5   
     toml6   
 ] |> fun x ->
-  //  x |> List.iter (prun parse_to_print)
+    x |> List.iter (prun parse_to_print)
     x |> List.iter (prun parse_toml_table)
         
 
