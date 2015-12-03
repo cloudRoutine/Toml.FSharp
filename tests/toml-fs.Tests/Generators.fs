@@ -49,12 +49,18 @@ let genMultiString    = genscaffold multiSet [|'\"';'\"';'\"'|]
 let genLiteralString  = genscaffold litset   [|'\''|]
 let genMultiLitString = genscaffold multiSet [|'\'';'\'';'\''|]
 
-let basic_string_gen     = Arb.fromGen genBasicString 
-let multi_string_gen     = Arb.fromGen genMultiString
-let literal_string_gen   = Arb.fromGen genLiteralString
-let multi_lit_string_gen = Arb.fromGen genMultiLitString
+let genTomlString = 
+    Gen.oneof[genBasicString; genMultiString; genLiteralString; genMultiLitString]
 
-type BasicString = static member String () = basic_string_gen
+
+let basic_string_arb     = Arb.fromGen genBasicString 
+let multi_string_arb     = Arb.fromGen genMultiString
+let literal_string_arb   = Arb.fromGen genLiteralString
+let multi_lit_string_arb = Arb.fromGen genMultiLitString
+let toml_string_arb      = Arb.fromGen genTomlString
+
+
+type BasicString = static member String () = basic_string_arb
 
 
 

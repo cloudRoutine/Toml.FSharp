@@ -149,7 +149,19 @@ module Parsers =
     
 
     let pString_toml : Parser<_> =
-        choice [basic_string; multi_string; literal_string; multi_literal_string] .>> skip_tspcs
+        let psr (stream:CharStream<_>) =
+            match stream.Peek() with
+            | '"'   ->  if stream.PeekString 3 = "\"\"\"" 
+                        then multi_string stream 
+                        else basic_string stream
+            | '\''  ->  if stream.PeekString 3 = "'''" 
+                        then multi_literal_string stream 
+                        else literal_string stream
+            | c     ->  Reply (Error, messageError <| 
+                            sprintf "At Ln %i Col %i found %c\n\
+                                Toml strings must begin with `\"`,`'`,`\"\"\"`, or `'''`" 
+                                stream.Line stream.Column c  )
+        psr .>> skip_tspcs
 
 
     (*|----------------------|*)
