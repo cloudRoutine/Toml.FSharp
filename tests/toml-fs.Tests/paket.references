@@ -1,6 +1,3 @@
-NUnit
-NUnit.Runners
+FParsec
 FsCheck
-FsCheck.XUnit
-XUnit
-xunit.abstractions
+Nunit
