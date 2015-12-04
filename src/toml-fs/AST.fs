@@ -62,7 +62,9 @@ and Table () =
 
     member self.Add (key:string,table:Table) = 
         if key.IndexOf "." = -1 then
-            if not (self.ContainSet.Add key) then false else
+            if  not (self.ContainSet.Add key) && 
+                self.Tables.ContainsKey key  then false else
+//            if not (self.ContainSet.Add key) then false else
             self.Tables.Add (key,table)
             true
         else
@@ -71,7 +73,7 @@ and Table () =
             match keys with
             | [hd] -> curTable.Add( hd,Table())
             | hd::tl -> 
-                if curTable.ContainsKey ( hd) then 
+                if curTable.Tables.ContainsKey ( hd) then 
                     loop tl curTable.[hd]
                 else
                     let tbl = Table() in 
@@ -96,7 +98,10 @@ and Table () =
                     curTable.Elems.Add (hd,value) 
                     true
                 else false
-            | hd::tl ->  loop tl curTable.[hd] 
+            | hd::tl ->  
+                if not (curTable.Tables.ContainsKey hd) then
+                    curTable.[hd] <- Table()
+                loop tl curTable.[hd] 
             | [] -> false
         loop keys self 
 

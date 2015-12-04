@@ -11,7 +11,7 @@ open System.Text
 module Parsers =
 
     type UserState = unit    
-    type Parser<'t> = Parser<'t,UserState>
+    type 't Parser = ('t,UserState) Parser 
 
     (*|---------------------------------------------|*)
     (*| Whitespace/Comment/LineEnd AKA Skip Parsers |*)
@@ -78,7 +78,7 @@ module Parsers =
     let ``\uXXXX``     : _ Parser = ``\`` >>. pchar 'u'  >>. anyString 4 |>> (sprintf "\u%s">> Char.Parse)
     let ``\UXXXXXXXX`` : _ Parser = ``\`` >>. pchar 'U'  >>. anyString 8 |>> (sprintf "\U%s">> Char.Parse)
 
-    let rec string_char flag startIndex (stream: CharStream<_>) =
+    let rec string_char flag startIndex (stream: _ CharStream) =
         match stream.Peek () with
         | '"' when flag -> // `"` doesn't need to be escaped in a multi-line string
             (``"``.>> notFollowedBy ``"``.>> notFollowedBy ``"``) stream 
@@ -125,7 +125,7 @@ module Parsers =
         between ``|"|``   ``|"|`` basic_string_content
 
     let multi_string_content: _ Parser = 
-        let inline psr (stream:CharStream<_>) =
+        let inline psr (stream:_ CharStream) =
             let multi_string_char = string_char true stream.Index
             (many1CharsTill multi_string_char  (lookAhead ``|"""|``)) stream
         psr
@@ -133,7 +133,6 @@ module Parsers =
 
     let multi_string : _ Parser = 
         between ``|"""|`` ``|"""|`` multi_string_content
-
 
 
     let literal_string : _ Parser = 
@@ -147,7 +146,7 @@ module Parsers =
     
 
     let pString_toml : _ Parser =
-        let psr (stream:CharStream<_>) =
+        let psr (stream: _ CharStream) =
             match stream.Peek() with
             | '"'   ->  if stream.PeekString 3 = "\"\"\"" 
                         then multi_string stream 
@@ -155,10 +154,10 @@ module Parsers =
             | '\''  ->  if stream.PeekString 3 = "'''" 
                         then multi_literal_string stream 
                         else literal_string stream
-            | c     ->  Reply (Error, messageError <| 
-                            sprintf "At Ln %i Col %i found %c\n\
-                                Toml strings must begin with `\"`,`'`,`\"\"\"`, or `'''`" 
-                                stream.Line stream.Column c  )
+            | c     ->  Reply (Error, messageError <|  sprintf 
+                            "At Ln %i Col %i found %c\n\
+                            Toml strings must begin with `\"`,`'`,`\"\"\"`, or `'''`" 
+                            stream.Line stream.Column c  )
         psr .>> skip_tspcs
 
 
@@ -168,12 +167,6 @@ module Parsers =
 
 
     let pInt64_toml : _ Parser = 
-//        choice [ pstring "0";
-//            followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
-//                >>. many1Chars (prevCharIs isDigit >>. skipChar '_' >>. digit <|> digit)
-//                .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
-//        ] |>> int64 
-
         choice [ pstring "0";
             followedByL (satisfy ((<>)'0')) "TOML ints cannot begin with leading 0s"
                 >>. (satisfy (isAnyOf['+';'-']|?|isDigit)) 
@@ -181,8 +174,6 @@ module Parsers =
                     .>> notFollowedByL ``.`` "TOML ints cannot contain `.`"
                     |>> fun (a,b) -> string a + b
         ] |>> int64 
-
-
 
 
     let isFloatChar = isDigit|?|isAnyOf['e';'E';'+';'-';'.']
@@ -223,7 +214,7 @@ module Parsers =
 
     // key formats
     let pBareKey          : _ Parser = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
-    let pQuoteKey         : _ Parser = between ``"`` ``"`` (many1Chars anyChar) 
+    let pQuoteKey         : _ Parser = between ``"`` ``"`` (many1Satisfy ((<>)'"'))
 
     // key in a collection
     let toml_key          : _ Parser = 
@@ -258,7 +249,7 @@ module Parsers =
     let pArray_toml : _ Parser = 
         let ``[``   : _ Parser = (attempt (``[`` .>> unicodeNewline .>> skip_tspcs)) <|> ``[`` 
         let ``]``   : _ Parser = (attempt (skip_tspcs .>> unicodeNewline .>> skip_tspcs >>. ``]``)) <|> ``]`` 
-        let rec loop acc (stream:CharStream<_>) =
+        let rec loop acc (stream:_ CharStream) =
             match stream.Peek() with 
             | ']' -> Reply acc
             | ' ' | '\t' | ','  ->  stream.Skip()
@@ -277,7 +268,7 @@ module Parsers =
 
     // low level parser implementation for simple toml values
     /// parses strings, ints, floats, bools, datetimes, inline tables, and arrays
-    let private value_parser (stream: CharStream<_>) =
+    let private value_parser (stream: _ CharStream) =
         match stream.Peek() with
         | '{' -> toml_inlineTable   stream
         | '[' -> toml_array         stream
@@ -291,20 +282,13 @@ module Parsers =
                 (stream.PeekString 4).ToCharArray()|> Seq.forall isDigit
             then attempt toml_datetime stream else
                 (attempt toml_float <|> toml_int) stream
-        | c -> Reply (Error, messageError <| sprintf  "The char `%c` with int value: %i\n\
-                                                      at Ln %i Col %i, was\n\
-                                                      unexpected in a parse for a TOML value" c (int c) stream.Line stream.Column)
+        | c -> Reply (Error, messageError <| sprintf  
+                       "The char `%c` with int value: %i\n\
+                        at Ln %i Col %i, was\n\
+                        unexpected in a parse for a TOML value" c (int c) stream.Line stream.Column)
     pValueImpl := value_parser .>> skip_tspcs
 
 
-//            let state, reply = stream.State, toml_float stream
-//            if reply.Status = Ok then reply else
-//            stream.BacktrackTo state
-//            let reply = toml_int  stream
-//            if reply.Status = Ok then reply else
-//            stream.BacktrackTo state
-//            Reply (Error, ErrorMessageList.Merge (expected "a datetime, int, or float", reply.Error))
-        
     (*|------------------|*)
     (*| Toplevel Parsers |*)
     (*|------------------|*)
@@ -332,45 +316,49 @@ module Parsers =
 
     // split the TOML file up into sections by their table keys
     let section_splitter : _ Parser =
-        let rec loop acc (stream:CharStream<_>) =
+        let rec loop acc (stream:_ CharStream) =
             match stream.Peek () with
-            | '['  ->   
-                if stream.Peek2 () = TwoChars ('[','[') 
-                then checkReply (paotKey.>>.raw_content_block) loop acc stream
-                else checkReply (ptkey.>>.raw_content_block) loop acc stream 
+            | '[' ->   
+                    if stream.Peek2 () = TwoChars ('[','[') 
+                    then checkReply (paotKey.>>.raw_content_block) loop acc stream
+                    else checkReply (ptkey  .>>.raw_content_block) loop acc stream 
             | '#' -> 
-                stream.SkipRestOfLine true 
-                loop acc stream
-            | ' ' | '\t' -> 
-                stream.SkipUnicodeWhitespace() |> ignore 
-                loop acc stream 
-            | '\n' -> 
-                if not (stream.SkipUnicodeNewline ()) 
-                then Reply acc 
-                else loop acc stream
-            | c when isKeyStart c -> stream.SkipRestOfLine true; loop acc stream
-            | c ->   
-                if stream.IsEndOfStream 
-                then Reply acc else
-                Reply (Error, expected <| sprintf  "could not parse unexpected character -'%c'\
-                                                    at Ln: %d Col: %d" c stream.Line stream.Column)
+                    stream.SkipRestOfLine true 
+                    loop acc stream
+            | ' ' 
+            | '\t'-> 
+                    stream.SkipUnicodeWhitespace() |> ignore 
+                    loop acc stream 
+            | '\n'-> 
+                    if not (stream.SkipUnicodeNewline ()) 
+                    then Reply acc 
+                    else loop acc stream
+            | c when isKeyStart c -> 
+                    stream.SkipRestOfLine true; loop acc stream
+            | c   ->   
+                    if stream.IsEndOfStream 
+                    then Reply acc else
+                    Reply (Error, expected <| sprintf  
+                       "could not parse unexpected character -'%c'\
+                        at Ln: %d Col: %d" c stream.Line stream.Column)
         loop [] 
 
 
     let toml_section, private pSectionImpl  = createParserForwardedToRef ()
 
     let private section_parser : _ Parser =
-        let rec loop acc (stream:CharStream<_>) =
+        let rec loop acc (stream:_ CharStream) =
             match stream.Peek () with
             | '#' ->  stream.SkipRestOfLine true;  loop acc stream
             | ' ' | '\t' -> stream.SkipUnicodeWhitespace () |> ignore; loop acc stream 
-            | '\n' ->       stream.SkipUnicodeNewline () |> ignore; loop acc stream
+            | '\n' ->       stream.SkipUnicodeNewline    () |> ignore; loop acc stream
             | '['  -> Reply acc  
             | c when isKeyStart c -> checkReply toml_item loop acc stream
             | c -> 
                 if stream.IsEndOfStream then Reply acc else
-                Reply (Error, expected <| sprintf "could not parse unexpected character -'%c'\
-                                                   at Ln: %d Col: %d" c stream.Line stream.Column)
+                Reply (Error, expected <| sprintf 
+                   "could not parse unexpected character -'%c'\
+                    at Ln: %d Col: %d" c stream.Line stream.Column)
         loop [] 
 
     pSectionImpl := section_parser .>> skip_tspcs
@@ -389,17 +377,17 @@ module Parsers =
 
 
     let inline extract (tables:(string*(string*Value)list)[]) =
-        if tables = [||] then [||],[||] else    
-        let key = (Array.head>>fst) tables
+        if   tables = [||]     then  [||]  , [||] 
+        elif tables.Length = 1 then  tables, [||] else
+        let key  = (Array.head>>fst) tables
         let root = getRoot key
         let filter = 
             // prevents combining two different arrays of tables
             if isAoT key then 
-                fst>>(isAoT|?|(getRoot>>((=)root)))
+                fun (x,_)-> isAoT x && getRoot x = root
             else 
                 // only extract groups of tables with the same root to make construction easier
-                // filter empty tables (empty array of tables can't be filtered)
-                fst>>((not<<isAoT)|&|(getRoot>>(=)root))
+                fun (x,_)-> not (isAoT x) && getRoot x = root                
         let took =       
             match Array.takeWhile filter tables  with 
             | xs when isAoT key -> xs
@@ -417,7 +405,7 @@ module Parsers =
             (Table (), elems) ||> List.fold (fun tbl (k,v) -> tbl.Add (keyName k,v)|>ignore; tbl)
 
         let foldAoT (prev:string, aotAcc:Table list) (cur:string, elems:(string*Value) list)  =
-
+            if elems = [] then (cur, aotAcc) else
             let key = keyName cur
             match prev, cur with
             | _, cur when cleanEnds cur = tableName ->
@@ -443,37 +431,42 @@ module Parsers =
             | prev, cur when parentKey cur = tableName && (not<<isAoT) cur ->  
                 aotAcc.Head.Add (key, (makeTable elems))|> ignore
                 (prev, aotAcc)
-
+            | prev, cur when not(isAoT cur) ->  
+                if aotAcc = [] then 
+                    (prev,[(makeTable elems)] )
+                else
+                    aotAcc.Head.Add (key, (makeTable elems))|> ignore
+                    (prev, aotAcc)
             | prev,cur ->   failwithf "reached unhandled Array of Table Case with - \n\
                                        %s\nprev - %s\ncurrent - %s\n%A" tableName prev cur elems
-        (("",[]),parseData) ||> Array.fold foldAoT 
-        |> fun (_,v) -> 
-            Value.ArrayOfTables v
-
+        (*------------------------ End of foldAoT ----------------------------------------------*)
+        (("" ,[Table()]), parseData) ||> Array.fold foldAoT 
+        |> fun (_,v) -> Value.ArrayOfTables v
 
 
     let construct_toml (toplevel:(string*Value) list, 
                         blocks:(string*(string*Value) list)[]) =
         let construct_table (toml:Table) (name:string,elems:(string*Value) list) =
             if toml.ContainsKey  name then toml else
-            elems |> List.iter(fun (k,v)-> toml.Add(k,v)|>ignore )
+            elems |> List.iter (fun (k,v) -> toml.Add (k,v) |> ignore)
             toml
 
         let rec addExtractedBlocks (tables:(string*(string*Value) list)[]) (toml:Table) =
-            let addelems elems =
+            let addelems elems (tbl:Table)  =
                 let name = (Array.head>>fst) elems
                 if isAoT name then 
                     let aot = construct_aot name elems
-                    toml.Add (getRoot name,aot) |> ignore
-                    toml
+                    tbl.Add (getRoot name,aot) |> ignore
+                    tbl
                 else          
-                    let toml = Array.fold construct_table  toml elems
-                    toml
+                    let tbl = Array.fold construct_table  toml elems
+                    tbl
+
             match extract tables with
             | [||], [||]  -> toml
             | [||], rest  -> addExtractedBlocks rest toml
-            | elems, [||] -> addelems elems
-            | elems, rest -> addExtractedBlocks rest (addelems elems)
+            | elems, [||] -> addelems elems toml
+            | elems, rest -> addExtractedBlocks rest (addelems elems toml)
     
         let rec addTopElems (ls:(string*Value)list) (toml:Table) = 
             match ls with 
@@ -482,7 +475,6 @@ module Parsers =
             | (k,v)::tl -> 
                 toml.Add(k,v)|>ignore
                 addTopElems tl toml
-
         Table() |> addTopElems toplevel |> addExtractedBlocks blocks 
 
 

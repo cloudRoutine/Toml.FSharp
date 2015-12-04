@@ -46,7 +46,7 @@ module  Array =
         let mutable count = 0
         while count < array.Length-1 && predicate array.[count] do
             count <- count + 1
-        array.[0..count-1]
+        array.[0..count]
 
 
     /// Return an array of elements that begin at the first element that failed

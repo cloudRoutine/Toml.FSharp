@@ -230,7 +230,7 @@ module  toml_samples =
 
     let toml6 = """
     
-       [[products]]
+      [[products]]
       name = "Hammer"
       sku = 738594937
 
@@ -303,18 +303,28 @@ module complex_tests =
 
 
 
+//
+//[
+//    toml0
+//    toml1
+//    toml2
+//    toml3
+//    toml4
+//    toml5   
+//    toml6   
+//] |> fun x ->
+//    x |> List.iter (prun parse_to_print)
+//    x |> List.iter (prun parse_toml_table)
 
-[
-    toml0
-    toml1
-    toml2
-    toml3
-    toml4
-    toml5   
-    toml6   
-] |> fun x ->
-    x |> List.iter (prun parse_to_print)
-    x |> List.iter (prun parse_toml_table)
+#time "on"
+
+prun parse_toml_table toml0;;
+prun parse_toml_table toml1;;
+prun parse_toml_table toml2;;
+prun parse_toml_table toml3;;
+prun parse_toml_table toml4;;
+prun parse_toml_table toml5;; 
+prun parse_toml_table toml6;; 
         
 
 //parseString basic_string "\"\\rline1\\nline2\\nline3\\rline4\"";;

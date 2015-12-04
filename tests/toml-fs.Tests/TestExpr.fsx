@@ -36,16 +36,24 @@ open TomlFs.Tests.Generators
 open TomlFs.Parsers
 
 let RFC3999DateTime (dateTime:DateTime) = dateTime.ToString("yyyy-MM-dd'T'HH:mm:ssZ")
-RFC3999DateTime (DateTime(2000,10,22,9,44,14,35))
+RFC3999DateTime (DateTime(2000,10,22,9,44,14,35));;
 //let x = "\"㭀醦䷛觚᧑锕෶ \""
 //parseString basic_string x;;
 //x.ToCharArray();;
 //let ms = "\"\"\"_______\"\"\"";;
 //parseString multi_string ms;;
+let x = "\"M啖W䛛:\".\"蝏\".\"撼᳢园ゥ\".\"S䉂竾ᓷ磲\""
+parseString pQuoteKey x;;
+x.ToCharArray();;
 
-parseString toml_array "[ '%	\"	糒', \"L綮+㸥MᇵI爏1䗟纛ᡠ㾾⾏\", \"\"\"鵋
-> A䩔聣[䐕E᜹#矿)䬣蒋ᶤ䔂缍ᣒ冎瘕\"\"\", '!&!幒', '''校''', '䱿', \"\"\"豥埊豉
-叒屩俥托珞橄
-各悅@#衇⳪晒鼎㥶䷀\"\"\", \"\"\"〼伶掏瓵@焒毐葔ᥰ卻賣◼䵚蛂K姦腄ᬉ唔跐ᖋ仳裾∗孿苝᯶嘁A\"\"\", '%'', '''";;
+(* Running an FsCheck Generator in FSI
 
+let rng = Random()
+for _ in 0..10 do 
+    Gen.elements(['A'..'Z']@['a'..'z']@['0'..'9']@['_'])
+    |> Gen.arrayOf |> lenAbove 3 |> Gen.map String
+    |> Gen.listOf  |> lenAbove 2 
+    |> Gen.map (String.concat ".") 
+    |> Gen.eval 5 (Random.StdGen(rng.Next(),rng.Next())) |> printfn "%s\n"
 
+*)

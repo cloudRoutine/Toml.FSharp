@@ -88,16 +88,27 @@ let [<Test>] ``parses all Arrays`` () =
     shortCheck <| Prop.forAll toml_array_arb (valueParser toml_array)
 
 
-
+(*|--------------------|*)
+(*| Table Parser Tests |*)
+(*|--------------------|*)
     
+
+let [<Test>] ``parses bare keys`` () =
+    shortCheck <| Prop.forAll toml_bareKey_arb (valueParser pBareKey)
+
+
+let [<Test>] ``parses quote keys`` () =
+    shortCheck <| Prop.forAll toml_quoteKey_arb (valueParser pQuoteKey)
+
+
+let [<Test>] ``parses toml keys`` () =
+    shortCheck <| Prop.forAll toml_key_arb (valueParser toml_key)
 
 
 #if INTERACTIVE
 // Test Switches
-let stringTests      = true
-let simpleValueTests = true
-
-
+let stringTests      = false
+let simpleValueTests = false
 
 if stringTests then 
     ``parses all basic strings`` ()
@@ -110,8 +121,12 @@ if simpleValueTests then
     ``parses all ints`` ()
     ``parses all floats`` ()
     ``parses bools`` () 
-    ``parses all DateTimes`` ()
+    ``parses all DateTimes``()
+    ``parses all Arrays`` ()
 
-``parses all Arrays`` ()
+
+``parses bare keys`` ()
+``parses quote keys`` () 
+``parses toml keys`` ()
 #endif
 

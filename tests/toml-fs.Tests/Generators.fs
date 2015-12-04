@@ -71,8 +71,8 @@ let toml_string_arb      = Arb.fromGen genTomlString
 
 // 64 bit (signed long) range expected (−9,223,372,036,854,775,808 to 9,223,372,036,854,775,807).
 
-let inline lenAbove num (a:'a[]) = a.Length > num
-let inline lenBelow num (a:'a[]) = a.Length < num
+let inline lenAbove num = Gen.suchThat (fun a -> (^a:(member Length:int)a) > num)
+let inline lenBelow num = Gen.suchThat (fun a -> (^a:(member Length:int)a) < num)
 
     
 let gen_digit       = ['0'..'9'] |> Gen.elements 
@@ -81,13 +81,13 @@ let gen_mid_digits  =
         let uscore  = (gen_digit, gen_digit) ||> Gen.map2 (fun a b -> [|a;'_';b|])
         Gen.oneof [uscore; genCharr gen_digit  ]
         |> (Gen.listOf >> Gen.map Array.concat)
-        |> Gen.suchThat (lenAbove 1)
+        |> lenAbove 1
 
 
 let genTomlInt = 
     Gen.map2  (fun a b -> Array.concat [a;b])
         (genCharr gen_first_digit) gen_mid_digits
-    |> Gen.suchThat (lenBelow 20)
+    |> lenBelow 20
     |> Gen.map String
 
 
@@ -139,11 +139,26 @@ let genArray =
         Gen.listOf genTomlFloat 
         Gen.listOf genTomlInt
         Gen.listOf (Arb.generate<int>  |> Gen.map string)
-    ] |> Gen.oneof |> Gen.map (String.concat ", ")
+    ]|> Gen.oneof |> Gen.map (String.concat ", ")
         |> Gen.map (sprintf "[ %s ]")
         
 
 let toml_array_arb  = Arb.fromGen genArray
+
+let genBareKey = 
+    Gen.elements(['A'..'Z']@['a'..'z']@['0'..'9']@['_'])
+    |> Gen.arrayOf |> lenAbove 3 |> Gen.map String
+    |> Gen.listOf  |> lenAbove 2 
+    |> Gen.map (String.concat ".") 
+
+let genQuoteKey =
+    genBasicString
+    |> Gen.listOf |> lenAbove 2
+    |> Gen.map (String.concat ".") 
+
+let toml_bareKey_arb    = Arb.fromGen genBareKey
+let toml_quoteKey_arb   = Arb.fromGen genQuoteKey
+let toml_key_arb        = Arb.fromGen (Gen.oneof[genBareKey;genQuoteKey])
 
 (* 
 
