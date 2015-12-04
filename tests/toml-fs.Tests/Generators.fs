@@ -10,7 +10,7 @@ open FsCheck
 (*|-------------------|*)
 
 
-let genCtrlSeq =
+let genCtrlSeq = // 0 - 31
     [0x00..0x1f] |> (Gen.elements>>Gen.map(char>>fun c -> [|'\\';c|]))
 
 let genEscSeq =
@@ -47,8 +47,14 @@ let multi_set = [100,gen { return [|'\n'|]}]@basic_set
 
 let genBasicString    = gen_scaffold basic_set       [|'\"'|]
 let genMultiString    = gen_scaffold multi_set       [|'\"';'\"';'\"'|]
-let genLiteralString  = gen_scaffold lit_set         [|'\''|]
+
 let genMultiLitString = gen_scaffold multi_lit_set   [|'\'';'\'';'\''|]
+let genLiteralString  =
+    Gen.map (fun arr -> 
+        let flat    = Array.concat arr
+        let quoted  = Array.concat [[|'\''|];flat;[|'\''|]]
+        String quoted) (Gen.frequency lit_set |> Gen.arrayOf)
+
 
 let genTomlString = 
     Gen.oneof [genBasicString; genMultiString; genLiteralString; genMultiLitString]
@@ -77,18 +83,17 @@ let inline lenBelow num = Gen.suchThat (fun a -> (^a:(member Length:int)a) < num
     
 let gen_digit       = ['0'..'9'] |> Gen.elements 
 let gen_first_digit = ['+';'-']@['1'..'9'] |> Gen.elements 
+
 let gen_mid_digits  = 
-        let uscore  = (gen_digit, gen_digit) ||> Gen.map2 (fun a b -> [|a;'_';b|])
-        Gen.oneof [uscore; genCharr gen_digit  ]
-        |> (Gen.listOf >> Gen.map Array.concat)
-        |> lenAbove 1
+    let uscore  = (gen_digit, gen_digit) ||> Gen.map2 (fun a b -> [|a;'_';b|])
+    Gen.oneof [uscore; genCharr gen_digit  ]
+    |> (Gen.listOf >> Gen.map Array.concat) |> lenAbove 1
 
 
 let genTomlInt = 
     Gen.map2  (fun a b -> Array.concat [a;b])
         (genCharr gen_first_digit) gen_mid_digits
-    |> lenBelow 20
-    |> Gen.map String
+    |> lenBelow 20 |> Gen.map String
 
 
 let rng = System.Random ()
@@ -130,68 +135,48 @@ let toml_bool_arb       = Arb.fromGen genBool
 let toml_datetime_arb   = Arb.fromGen genDateTime
 
 
+let value_set =
+   [genTomlInt
+    genTomlFloat
+    genBool
+    genDateTime 
+    genBasicString
+    genLiteralString
+    genTomlFloat 
+    genTomlInt
+    (Arb.generate<int>  |> Gen.map string) ]
+
 let genArray =
-    [   Gen.listOf genTomlInt
-        Gen.listOf genTomlFloat
-        Gen.listOf genBool
-        Gen.listOf genDateTime 
-        Gen.listOf genTomlString
-        Gen.listOf genTomlFloat 
-        Gen.listOf genTomlInt
-        Gen.listOf (Arb.generate<int>  |> Gen.map string)
-    ]|> Gen.oneof |> Gen.map (String.concat ", ")
+    value_set |> List.map Gen.listOf
+    |> Gen.oneof |> Gen.map (String.concat ", ")
         |> Gen.map (sprintf "[ %s ]")
         
 
 let toml_array_arb  = Arb.fromGen genArray
 
+let genValue = Gen.oneof (genArray::value_set)
+
 let genBareKey = 
     Gen.elements(['A'..'Z']@['a'..'z']@['0'..'9']@['_'])
     |> Gen.arrayOf |> lenAbove 3 |> Gen.map String
-    |> Gen.listOf  |> lenAbove 2 
-    |> Gen.map (String.concat ".") 
 
-let genQuoteKey =
-    genBasicString
-    |> Gen.listOf |> lenAbove 2
-    |> Gen.map (String.concat ".") 
+let genBareTableKey =
+    genBareKey |> Gen.listOf  |> lenAbove 2 |> Gen.map (String.concat ".") 
 
-let toml_bareKey_arb    = Arb.fromGen genBareKey
-let toml_quoteKey_arb   = Arb.fromGen genQuoteKey
-let toml_key_arb        = Arb.fromGen (Gen.oneof[genBareKey;genQuoteKey])
+let genQuoteTableKey =
+    genBasicString |> Gen.listOf |> lenAbove 2 |> Gen.map (String.concat ".") 
 
-(* 
+let genKey = (Gen.oneof[genBareKey;genBasicString])
+let genTableKey = (Gen.oneof[genBareTableKey;genQuoteTableKey])
 
+let genKeyValPair = 
+    Gen.map2 (fun key value -> String.Concat [|key;" = ";value|])
+        genKey genValue
 
-* Comment Generator
--------------------
-    # followed by text
-    end with `\n`
-
-* Integer Generator
--------------------
-    0 alone
-    can start with + or -
-    [1-9] first digit
-    `_` but only between digits e.g. 200_000
-    64 bit (signed long) range expected 
-        (−9,223,372,036,854,775,808 to 9,223,372,036,854,775,807)
-
-
-* Float Generator
------------------
-
-
-* Bare Keys
-------------
-Bare keys may only contain letters, numbers, underscores, and dashes (A-Za-z0-9_-). 
-Note that bare keys are allowed to be composed of only digits, e.g. 1234. 
-
-* Quoted Keys
--------------
-Basic strings interspersed with `.`
-
-
-*)
-
+let toml_bareKey_arb         = Arb.fromGen genBareKey
+let toml_bareTableKey_arb    = Arb.fromGen genBareTableKey
+let toml_quoteTableKey_arb   = Arb.fromGen genQuoteTableKey
+let toml_key_arb             = Arb.fromGen genKey
+let toml_tableKey_arb        = Arb.fromGen genTableKey
+let toml_item_arb            = Arb.fromGen genKeyValPair
 

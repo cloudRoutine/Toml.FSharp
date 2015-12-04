@@ -85,24 +85,32 @@ let [<Test>] ``parses all DateTimes`` () =
 
 
 let [<Test>] ``parses all Arrays`` () =
-    shortCheck <| Prop.forAll toml_array_arb (valueParser toml_array)
+    Check.QuickThrowOnFailure <| Prop.forAll toml_array_arb (valueParser toml_array)
 
 
 (*|--------------------|*)
 (*| Table Parser Tests |*)
 (*|--------------------|*)
-    
 
-let [<Test>] ``parses bare keys`` () =
-    shortCheck <| Prop.forAll toml_bareKey_arb (valueParser pBareKey)
+let [<Test>] ``parses keys for table elements `` () =
+    shortCheck <| Prop.forAll toml_key_arb (valueParser toml_key)
 
 
-let [<Test>] ``parses quote keys`` () =
-    shortCheck <| Prop.forAll toml_quoteKey_arb (valueParser pQuoteKey)
+let [<Test>] ``parses bare table keys`` () =
+    shortCheck <| Prop.forAll toml_bareTableKey_arb (valueParser pBareKey)
+
+
+let [<Test>] ``parses quote table keys`` () =
+    shortCheck <| Prop.forAll toml_quoteTableKey_arb (valueParser pQuoteKey)
 
 
 let [<Test>] ``parses toml keys`` () =
     shortCheck <| Prop.forAll toml_key_arb (valueParser toml_key)
+
+
+let [<Test>] ``parses toml items (key value pairs)`` () =
+    Check.QuickThrowOnFailure <| Prop.forAll toml_item_arb (valueParser toml_item)
+
 
 
 #if INTERACTIVE
@@ -125,8 +133,10 @@ if simpleValueTests then
     ``parses all Arrays`` ()
 
 
-``parses bare keys`` ()
-``parses quote keys`` () 
-``parses toml keys`` ()
+``parses keys for table elements `` ()
+``parses bare table keys`` ()
+``parses quote table keys`` () 
+``parses toml keys`` () 
+``parses toml items (key value pairs)`` ()
 #endif
 

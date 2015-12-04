@@ -15,38 +15,19 @@ open TomlFs.Parsers
 
 
 
-//Prop.forAll basic_string_gen (fun (str:string) ->
-//    (str.Length > 2) ==>
-//        match parseString basic_string str with
-//        | Success(_,_,_) -> true
-//        | _ -> false) |> fun x -> 
-//        Check.One({Config.QuickThrowOnFailure with  
-//                    MaxTest     = 25000 
-//                    StartSize   = 50    
-//                    EndSize     = 2000  
-//                    }, x )
-//
-//;;
-open System
-open FsCheck
-open FParsec 
-open TomlFs
-open TomlFs.Tests.Prelude
-open TomlFs.Tests.Generators
-open TomlFs.Parsers
-
-let RFC3999DateTime (dateTime:DateTime) = dateTime.ToString("yyyy-MM-dd'T'HH:mm:ssZ")
-RFC3999DateTime (DateTime(2000,10,22,9,44,14,35));;
-//let x = "\"㭀醦䷛觚᧑锕෶ \""
-//parseString basic_string x;;
-//x.ToCharArray();;
-//let ms = "\"\"\"_______\"\"\"";;
-//parseString multi_string ms;;
-let x = "\"M啖W䛛:\".\"蝏\".\"撼᳢园ゥ\".\"S䉂竾ᓷ磲\""
-parseString pQuoteKey x;;
+let x  = "\"W>⤃╍楮忇粥菀灴裸.℄埧玛M㙟巑墹湳ḃ馜胐4疈螕狁ん楏\"⩲摽鴹㛾幜GㆀBЁ+敪黒㟫彉饔㌙๎\" = +266_55_45_821407"
+parseString toml_item x;;
 x.ToCharArray();;
 
-(* Running an FsCheck Generator in FSI
+
+//let rng = Random()
+//for _ in 0..50 do 
+//    genKeyValPair
+//    |> Gen.eval 5 (Random.StdGen(rng.Next(),rng.Next())) |> printfn "%s\n"
+//
+
+
+(* Running an FsCheck Generator in FSI 
 
 let rng = Random()
 for _ in 0..10 do 
@@ -55,5 +36,4 @@ for _ in 0..10 do
     |> Gen.listOf  |> lenAbove 2 
     |> Gen.map (String.concat ".") 
     |> Gen.eval 5 (Random.StdGen(rng.Next(),rng.Next())) |> printfn "%s\n"
-
 *)
