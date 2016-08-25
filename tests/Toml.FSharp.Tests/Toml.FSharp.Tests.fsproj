@@ -7,11 +7,11 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>6eff2024-f27c-4d7c-b401-a751cfcb0e1d</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>toml-fs.Tests</RootNamespace>
-    <AssemblyName>toml-fs.Tests</AssemblyName>
+    <RootNamespace>Toml.FSharp.Tests</RootNamespace>
+    <AssemblyName>Toml.FSharp.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
-    <Name>toml-fs.Tests</Name>
+    <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
+    <Name>Toml.FSharp.Tests</Name>
     <TargetFrameworkProfile />
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\</SolutionDir>
   </PropertyGroup>
@@ -20,20 +20,15 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>bin\$(Configuration)</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <StartAction>Project</StartAction>
-    <StartProgram>
-    </StartProgram>
-    <StartArguments>
-    </StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
-    <OutputPath>bin\Release\</OutputPath>
+    <OutputPath>bin\$(Configuration)</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
   </PropertyGroup>
@@ -79,8 +74,10 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-    <ProjectReference Include="..\..\src\toml-fs\toml-fs.fsproj">
-      <Name>toml-fs</Name>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\toml-fs\Toml.FSharp.fsproj">
+      <Name>Toml.FSharp</Name>
       <Project>{fb1a1a88-dc9f-44ef-9ec1-731a3f58dddf}</Project>
       <Private>True</Private>
     </ProjectReference>

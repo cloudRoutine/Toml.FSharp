@@ -27,13 +27,13 @@ x.ToCharArray();;
 //
 
 
-(* Running an FsCheck Generator in FSI 
-
+// Running an FsCheck Generator in FSI 
+open System
 let rng = Random()
+;;
 for _ in 0..10 do 
     Gen.elements(['A'..'Z']@['a'..'z']@['0'..'9']@['_'])
     |> Gen.arrayOf |> lenAbove 3 |> Gen.map String
     |> Gen.listOf  |> lenAbove 2 
     |> Gen.map (String.concat ".") 
     |> Gen.eval 5 (Random.StdGen(rng.Next(),rng.Next())) |> printfn "%s\n"
-*)

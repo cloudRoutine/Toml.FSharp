@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{63297B98-5CED-492C-A5B7-A5B4F73CF142}"
 	ProjectSection(SolutionItems) = preProject
@@ -9,8 +9,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{63297B
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{A6A6AF7D-D6E3-442D-9B1E-58CC91879BE1}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "toml-fs", "src\toml-fs\toml-fs.fsproj", "{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60BC93-E09B-4E5F-9D85-95A519479D54}"
 	ProjectSection(SolutionItems) = preProject
@@ -33,9 +31,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "content", "content", "{8E6D
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ED8079DD-2B06-4030-9F0F-DC548F98E1C4}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "toml-fs.Tests", "tests\toml-fs.Tests\toml-fs.Tests.fsproj", "{6EFF2024-F27C-4D7C-B401-A751CFCB0E1D}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Toml.FSharp.Tests", "tests\Toml.FSharp.Tests\Toml.FSharp.Tests.fsproj", "{6EFF2024-F27C-4D7C-B401-A751CFCB0E1D}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "toml-tp", "src\toml-tp\toml-tp.fsproj", "{9900741B-7E22-4167-B45D-BD95650B5BD1}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Toml.FSharp", "src\Toml.FSharp\Toml.FSharp.fsproj", "{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TomlProvider", "src\TomlProvider\TomlProvider.fsproj", "{9900741B-7E22-4167-B45D-BD95650B5BD1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -43,14 +43,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{6EFF2024-F27C-4D7C-B401-A751CFCB0E1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{6EFF2024-F27C-4D7C-B401-A751CFCB0E1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6EFF2024-F27C-4D7C-B401-A751CFCB0E1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6EFF2024-F27C-4D7C-B401-A751CFCB0E1D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB1A1A88-DC9F-44EF-9EC1-731A3F58DDDF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{9900741B-7E22-4167-B45D-BD95650B5BD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9900741B-7E22-4167-B45D-BD95650B5BD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9900741B-7E22-4167-B45D-BD95650B5BD1}.Release|Any CPU.ActiveCfg = Release|Any CPU

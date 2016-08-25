@@ -1,4 +1,4 @@
-﻿module TomlFs.AST
+﻿module TomlFSharp.AST
 #nowarn "62"
 
 open System
@@ -43,9 +43,11 @@ and [<RequireQualifiedAccess>]
         | Float v           -> string v
         | Bool v            -> string v
         | DateTime v        -> string v
-        | InlineTable v     -> string v
+        | InlineTable v     -> v.InlineTableString()
         | Array vs          -> 
-            vs |> List.map string |> String.concat "; " |> sprintf "[| %s |]" 
+            match vs with
+            | InlineTable _ ::_ -> vs |> List.map string |> String.concat "; " |> sprintf "[| %s\n|]" 
+            | _ -> vs |> List.map string |> String.concat "; " |> sprintf "[| %s |]" 
         | ArrayOfTables vs  -> 
             vs |> List.map string |> String.concat ";\n"
             |> String.indent 2|> sprintf "[|\n%s\n|]"
@@ -126,6 +128,36 @@ and Table () =
     new (key:string, table:Table) as self = 
         Table () then self.Tables.Add (key,table)
 
+    member self.InlineTableString() =
+        let sb = StringBuilder ()
+        let maxklen, _ = findKVPMaxes (elems :> seq<_>)
+        elems |> Seq.iteri (fun idx topkvp -> 
+            match topkvp.Value with
+            | Value.ArrayOfTables tbls ->
+                sb.AppendLine (sprintf "%-*s = [|" maxklen topkvp.Key )|>ignore
+                tbls |> List.iter (fun elems ->
+                    let eb = StringBuilder()
+                    eb.AppendLine(sprintf "[[%s]] {" topkvp.Key)|>ignore
+                    elems.Elems |> Seq.iter (fun kvp -> 
+                        sprintf "\n%-*s = %s" maxklen kvp.Key (string kvp.Value)|> eb.Append|>ignore)
+                    let substr = string eb |> String.indent 3
+                    substr |> sb.Append |> ignore
+                    "};\n" |> sb.Append |> ignore 
+                )
+                sb.AppendLine ("|]")|>ignore
+            | _ -> 
+                if idx = 0 then
+                    sprintf "%-*s = %s" maxklen topkvp.Key (string topkvp.Value) |> sb.Append |> ignore 
+                else
+                    sprintf "\n   %-*s = %s" maxklen topkvp.Key (string topkvp.Value) |> sb.Append |> ignore
+        ) 
+        // the toplevel kvps are stored in the stringbuilder
+        self.SubTables() |> Seq.iter (fun (name,data)  ->
+            let substr = sprintf "[%s]\n%s" name (string data) |> String.indent 2
+            sb.AppendLine substr|>ignore
+            |> ignore)
+        (string sb |> String.indent 2).TrimEnd [|'\n';' '|] |> sprintf "\n  {%s  }"         
+
     override self.ToString () =
         let sb = StringBuilder ()
         sb.AppendLine() |> ignore
@@ -145,7 +177,7 @@ and Table () =
                 )
                 sb.AppendLine ("|]")|>ignore
             | _ ->    sprintf "%-*s = %s" maxklen topkvp.Key (string topkvp.Value) |> sb.AppendLine |> ignore) 
-
+        // the toplevel kvps are stored in the stringbuilder
         self.SubTables() |> Seq.iter (fun (name,data) ->
             let substr = sprintf "[%s]\n%s" name (string data) |> String.indent 2
             sb.AppendLine substr|>ignore

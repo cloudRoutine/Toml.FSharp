@@ -7,9 +7,9 @@
 
 open System 
 open FParsec
-open TomlFs.Prelude
-open TomlFs.AST
-open TomlFs.Parsers
+open TomlFSharp.Prelude
+open TomlFSharp.AST
+open TomlFSharp.Parsers
 
 
 [<AutoOpen>] 

@@ -1,11 +1,11 @@
 ﻿#nowarn "62"
-namespace TomlFs
+namespace TomlFSharp
 
 open System
 open System.Collections.Generic
 open FParsec
 open FParsec.Primitives
-open TomlFs.AST
+open TomlFSharp.AST
 open System.Text
 
 module Parsers =
@@ -188,10 +188,9 @@ module Parsers =
 
 
     let private toDateTime str =
-        let mutable dt = Unchecked.defaultof<DateTime>
-        match DateTime.TryParse (str, &dt) with
-        | false -> failwithf "failed parsing into DateTime - %s" str
-        | true  -> dt
+        match DateTime.TryParse str with
+        | false,_ -> failwithf "failed parsing into DateTime - %s" str
+        | true,dt  -> dt
 
     let isDateChar = isDigit|?|isAnyOf['T';':';'.';'-';'Z']
 
@@ -215,14 +214,15 @@ module Parsers =
     // key formats
     let pBareKey          : _ Parser = many1Satisfy (isDigit|?|isLetter|?|isAnyOf['_';'-']) 
     let pQuoteKey         : _ Parser = between ``"`` ``"`` (many1Satisfy ((<>)'"'))
-
+    //let pQuoteKey         : _ Parser = between ``"`` ``"`` (many1CharsTill (noneOf['"']) (lookAhead``"``))
+    let pLiteralKey       : _ Parser = between ``'`` ``'`` (many1CharsTill (noneOf['\'']) (lookAhead``'``))
     // key in a collection
     let toml_key          : _ Parser = 
-        (choiceL [pBareKey; pQuoteKey ] 
+        (choiceL [pLiteralKey;  pQuoteKey;pBareKey; ] 
             "a quoted key starting with \"\
              or a bare key starting with a letter or digit\n") .>> skip_tspcs
 
-    // toplevel keys
+    // toplevel keys    
     let pTableKey         : _ Parser = between ``[``   ``]`` (sepBy toml_key ``.``)
     let pArrayOfTablesKey : _ Parser = between ``[[`` ``]]`` (sepBy toml_key ``.``)
 

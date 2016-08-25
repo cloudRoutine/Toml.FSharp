@@ -142,8 +142,6 @@ let value_set =
     genDateTime 
     genBasicString
     genLiteralString
-    genTomlFloat 
-    genTomlInt
     (Arb.generate<int>  |> Gen.map string) ]
 
 let genArray =
@@ -161,7 +159,7 @@ let genBareKey =
     |> Gen.arrayOf |> lenAbove 3 |> Gen.map String
 
 let genBareTableKey =
-    genBareKey |> Gen.listOf  |> lenAbove 2 |> Gen.map (String.concat ".") 
+    genBareKey |> Gen.listOf |> lenAbove 2 |> Gen.map (String.concat ".") 
 
 let genQuoteTableKey =
     genBasicString |> Gen.listOf |> lenAbove 2 |> Gen.map (String.concat ".") 

@@ -92,6 +92,7 @@ let [<Test>] ``parses all Arrays`` () =
 (*| Table Parser Tests |*)
 (*|--------------------|*)
 
+
 let [<Test>] ``parses keys for table elements `` () =
     shortCheck <| Prop.forAll toml_key_arb (valueParser toml_key)
 
