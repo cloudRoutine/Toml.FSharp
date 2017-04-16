@@ -1,8 +1,8 @@
 ﻿namespace System
 open System.Reflection
 
-[<assembly: AssemblyTitleAttribute("toml-fs")>]
-[<assembly: AssemblyProductAttribute("toml-fs")>]
+[<assembly: AssemblyTitleAttribute("Toml.FSharp")>]
+[<assembly: AssemblyProductAttribute("Toml.FSharp")>]
 [<assembly: AssemblyDescriptionAttribute("FParsec TOML Parser for F#")>]
 [<assembly: AssemblyVersionAttribute("1.0")>]
 [<assembly: AssemblyFileVersionAttribute("1.0")>]
