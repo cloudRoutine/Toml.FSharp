@@ -14,8 +14,8 @@ module TomlFs.Tests.ParserTests
 open NUnit.Framework
 open FsCheck
 open FParsec 
-open TomlFs.Prelude
-open TomlFs.Parsers
+open TomlFSharp.Prelude
+open TomlFSharp.Parsers
 open TomlFs.Tests.Prelude
 open TomlFs.Tests.Generators
 
