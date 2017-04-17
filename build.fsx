@@ -3,7 +3,7 @@ System.IO.Directory.SetCurrentDirectory __SOURCE_DIRECTORY__
 // FAKE build script
 // --------------------------------------------------------------------------------------
 
-#r @"packages/FAKE/tools/FakeLib.dll"
+#r @"packages/build/FAKE/tools/FakeLib.dll"
 open Fake
 open Fake.Git
 open Fake.AssemblyInfoFile
@@ -119,7 +119,13 @@ Target "CopyBinaries" (fun _ ->
 // Clean build results
 
 Target "Clean" (fun _ ->
-    CleanDirs ["bin"; "temp"]
+    !! "src/**/bin" 
+    ++ "src/**/obj" 
+    ++ "tests/**/bin" 
+    ++ "tests/**/obj" 
+    ++ "bin"
+    ++ "temp"
+    |> CleanDirs 
 )
 
 Target "CleanDocs" (fun _ ->
@@ -291,7 +297,7 @@ Target "ReleaseDocs" (fun _ ->
     Branches.push tempDocsDir
 )
 
-#load "paket-files/fsharp/FAKE/modules/Octokit/Octokit.fsx"
+#load "paket-files/build/fsharp/FAKE/modules/Octokit/Octokit.fsx"
 open Octokit
 
 Target "Release" (fun _ ->

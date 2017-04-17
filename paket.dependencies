@@ -1,14 +1,22 @@
 source https://nuget.org/api/v2
+source https://api.nuget.org/v3/index.json
 
+redirects: on
+
+nuget FSharp.Core redirects :force, content:None
 nuget FParsec
-nuget FsCheck
-nuget FSharp.Formatting
-nuget FAKE
+nuget FsCheck content:None
+
 nuget Nunit
 nuget NUnit.ConsoleRunner
 nuget SourceLink.Fake
 
+group Build 
+    source https://nuget.org/api/v2
+    source https://api.nuget.org/v3/index.json
 
+    
+    nuget FSharp.Formatting
+    nuget FAKE
 
-
-github fsharp/FAKE modules/Octokit/Octokit.fsx
+    github fsharp/FAKE modules/Octokit/Octokit.fsx
