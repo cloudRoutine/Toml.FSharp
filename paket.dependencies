@@ -5,6 +5,7 @@ nuget FsCheck
 nuget FSharp.Formatting
 nuget FAKE
 nuget Nunit
+nuget NUnit.ConsoleRunner
 nuget SourceLink.Fake
 
 
