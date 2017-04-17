@@ -11,17 +11,30 @@ NUGET
       FSharpVSPowerTools.Core (2.1)
     FSharpVSPowerTools.Core (2.1)
       FSharp.Compiler.Service (>= 1.4.0.6)
-    Microsoft.Bcl (1.1.10)
+    Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl.Build (>= 1.0.14)
-    Microsoft.Bcl.Build (1.0.21) - import_targets: false
-    Microsoft.Net.Http (2.2.29)
+    Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40-full
+    Microsoft.Net.Http (2.2.29) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl (>= 1.1.10)
       Microsoft.Bcl.Build (>= 1.0.14)
     NUnit (3.0.1)
-    Octokit (0.16)
-      Microsoft.Net.Http
+    NUnit.ConsoleRunner (3.6.1)
+    NUnit.Extension.NUnitProjectLoader (3.5)
+    NUnit.Extension.NUnitV2Driver (3.6)
+    NUnit.Extension.NUnitV2ResultWriter (3.5)
+    NUnit.Extension.TeamCityEventListener (1.0.2)
+    NUnit.Extension.VSProjectLoader (3.5)
+    NUnit.Runners (3.6.1)
+      NUnit.ConsoleRunner (>= 3.6.1)
+      NUnit.Extension.NUnitProjectLoader (>= 3.5)
+      NUnit.Extension.NUnitV2Driver (>= 3.6)
+      NUnit.Extension.NUnitV2ResultWriter (>= 3.5)
+      NUnit.Extension.TeamCityEventListener (>= 1.0.2)
+      NUnit.Extension.VSProjectLoader (>= 3.5)
+    Octokit (0.24)
+      Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
     SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
-    modules/Octokit/Octokit.fsx (917a86046700e4eaaa2aa09de7895e048eaaa1b1)
-      Octokit
+    modules/Octokit/Octokit.fsx (dad2dec00064233e9742b458d96fe64708f3be8a)
+      Octokit (>= 0.20)

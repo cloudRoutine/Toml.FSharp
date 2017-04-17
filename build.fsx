@@ -140,6 +140,8 @@ Target "RunTests" (fun _ ->
     |> NUnit (fun p ->
         { p with
             DisableShadowCopy = true
+            ToolPath = "./packages/NUnit.ConsoleRunner/tools"
+            ToolName = "nunit-agent.exe"
             TimeOut = TimeSpan.FromMinutes 20.
             OutputFile = "TestResults.xml" })
 )
@@ -329,7 +331,7 @@ Target "All" DoNothing
   ==> "AssemblyInfo"
   ==> "Build"
   ==> "CopyBinaries"
-//  ==> "RunTests"
+  ==> "RunTests"
   ==> "GenerateReferenceDocs"
   ==> "GenerateDocs"
   ==> "All"
